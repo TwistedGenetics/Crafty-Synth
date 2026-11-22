@@ -138,6 +138,76 @@ jobs:
       - name: Editor and flasher tests
         run: node --test web/flasher/test/*.test.mjs web/editor/test/*.test.mjs
 
+  # -------------------------------------------------------------------------------------------------------------
+  # The AU / VST3 plugin and standalone app (macOS, Apple Silicon and Intel), after the FM-1 has built: the same
+  # engine, so a change that breaks the FM-1 never ships in a plugin.
+  plugin-mac:
+    needs: firmware
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python packages (the wavetables)
+        run: pip install numpy
+      - name: Cache JUCE
+        uses: actions/cache@v4
+        with:
+          path: ~/juce-8.0.4
+          key: juce-8.0.4-macos
+      - name: JUCE 8.0.4
+        run: |
+          [ -d ~/juce-8.0.4/modules ] || git clone -q --depth 1 --branch 8.0.4 https://github.com/juce-framework/JUCE ~/juce-8.0.4
+      - name: The plugin's own test (no host, no window)
+        run: |
+          set -o pipefail
+          cmake -S ports/plugin -B build/plugin-test -DCMAKE_BUILD_TYPE=Release -DCRAFTY_JUCE_DIR=$HOME/juce-8.0.4 -DCRAFTY_TESTS_ONLY=ON >/dev/null
+          cmake --build build/plugin-test -j 4 2>&1 | tail -20
+          build/plugin-test/CraftyPluginTest_artefacts/Release/CraftyPluginTest
+      - name: Build AU, VST3 and the standalone app (universal)
+        run: |
+          set -o pipefail
+          cmake -S ports/plugin -B build/plugin -DCMAKE_BUILD_TYPE=Release -DCRAFTY_JUCE_DIR=$HOME/juce-8.0.4 \
+            "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+          cmake --build build/plugin --config Release -j 4 2>&1 | grep -E "error|warning: |Linking|Built target" | tail -40
+          ls build/plugin/CraftySynth_artefacts/Release
+      - name: Sign (ad hoc) and check
+        run: |
+          A=build/plugin/CraftySynth_artefacts/Release
+          for b in "$A/AU/Crafty Synth.component" "$A/VST3/Crafty Synth.vst3" "$A/Standalone/Crafty Synth.app"; do
+            codesign --force --deep --sign - "$b"
+            lipo -archs "$b/Contents/MacOS/Crafty Synth"
+          done
+      - name: pluginval (VST3) and auval (AU)
+        run: |
+          set -o pipefail
+          A=build/plugin/CraftySynth_artefacts/Release
+          curl -sSL -o /tmp/pv.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip
+          unzip -q /tmp/pv.zip -d /tmp/pv
+          /tmp/pv/pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --skip-gui-tests --validate-in-process \
+            --timeout-ms 300000 --validate "$A/VST3/Crafty Synth.vst3" 2>&1 | tail -40
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "$A/AU/Crafty Synth.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          sleep 3
+          auval -v aumu CrSy TwGn 2>&1 | tail -25
+      - name: Package
+        run: |
+          v=$(tr -d ' \n' < VERSION)
+          A=build/plugin/CraftySynth_artefacts/Release
+          mkdir -p pkg/Crafty-Synth-$v-mac dist
+          cp -R "$A/AU/Crafty Synth.component" "$A/VST3/Crafty Synth.vst3" "$A/Standalone/Crafty Synth.app" pkg/Crafty-Synth-$v-mac/
+          cp ports/plugin/INSTALL.txt pkg/Crafty-Synth-$v-mac/
+          (cd pkg && ditto -c -k --keepParent Crafty-Synth-$v-mac ../dist/Crafty-Synth-$v-mac.zip)
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-mac-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+
   release:
     if: >-
       startsWith(github.ref, 'refs/tags/v') ||

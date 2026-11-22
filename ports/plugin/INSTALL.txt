@@ -1,0 +1,21 @@
+Crafty Synth for macOS: AU, VST3 and a standalone app (Apple Silicon and Intel)
+================================================================================
+
+1. Copy the plug-ins:
+     Crafty Synth.component  ->  ~/Library/Audio/Plug-Ins/Components/
+     Crafty Synth.vst3       ->  ~/Library/Audio/Plug-Ins/VST3/
+   (Crafty Synth.app can go anywhere, e.g. /Applications.)
+
+2. They are not notarised (no paid Apple developer account), so macOS blocks them at first.
+   In Terminal, once:
+     xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/"Crafty Synth.component"
+     xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"Crafty Synth.vst3"
+     xattr -dr com.apple.quarantine "/Applications/Crafty Synth.app"
+
+3. Restart your DAW (Ableton Live: Preferences -> Plug-Ins -> Rescan).
+
+Your user presets and wavetables are kept in
+  ~/Library/Application Support/Twisted Genetics/Crafty Synth/Crafty Synth.user
+shared by every instance, and in the FM-1's own format.
+
+Manual: https://github.com/TwistedGenetics/Crafty-Synth/blob/main/docs/PORTS.md
