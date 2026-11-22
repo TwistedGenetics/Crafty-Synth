@@ -4,7 +4,9 @@ A firmware for the **M-VAVE FM-1** that turns it into a monophonic wavetable syn
 (its manual, OS 1.4): the same engine layout, the same controls, the same MIDI CC chart. On the FM-1 you get 27 keys,
 a big screen and seven knobs to drive it.
 
-**Status: 0.4 beta, not yet tried on a real FM-1.** Read [docs/RECOVERY.md](docs/RECOVERY.md) before installing.
+**Also as an AU / VST3 plugin for macOS and an MPC plugin**, the same engine, released together: [docs/PORTS.md](docs/PORTS.md).
+
+**Status: 0.5 beta, not yet tried on a real FM-1.** Read [docs/RECOVERY.md](docs/RECOVERY.md) before installing.
 
 - **Editor:** [twistedgenetics.github.io/Crafty-Synth/editor](https://twistedgenetics.github.io/Crafty-Synth/editor/):
   every value, a preview running the firmware's own engine (WebAssembly), presets to and from the FM-1, and **Serum /

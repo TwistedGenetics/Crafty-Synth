@@ -55,7 +55,9 @@ static void mpc_list(uint32_t id, mpc_list_t *l)
                 ;                          /* a name seen before (a value that wraps round): that choice */
             if (c == l->n && l->n < MPC_MAXOPT) {
                 l->rep[l->n] = (uint8_t)((start + v - 1u) / 2u);
-                snprintf(l->name[l->n], sizeof l->name[0], "%s", prev);
+                size_t len = strlen(prev) < sizeof l->name[0] - 1u ? strlen(prev) : sizeof l->name[0] - 1u;
+                memcpy(l->name[l->n], prev, len);   /* (no snprintf: gcc's -Wformat-truncation) */
+                l->name[l->n][len] = 0;
                 l->n++;
             }
             for (k = start; k < v; k++)

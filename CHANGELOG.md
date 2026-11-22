@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5 beta (2026-11-22)
+
+Crafty Synth in three forms, built from the same engine and released together, the FM-1 first (docs/PORTS.md):
+
+- **AU / VST3 / standalone for macOS** (Apple Silicon and Intel). The window is the editor; every patch value is a
+  host parameter showing the FM-1's value text; 192 programs; user presets and wavetables in one shared file (the
+  FM-1's user area format); the arp-seq locks to the DAW's beat; any sample rate.
+- **MPC plugin** for Gen1 MPCs and the Force, through the community MPC toolkit: every value on six pages in the
+  SERUM look, presets by bank and slot and in MPC's PRESET menu, the MPC's tempo and transport, your user file.
+- FM-1: unchanged in use. Its value text and user-area format moved into shared code (src/core) so the plugins
+  read the same; the arp-seq's callbacks gained an instance for the plugins.
+- Editor: the working patch is sent to the working slot (0.4 sent it to U8-8: INIT, RANDOM and pattern edits could
+  overwrite that slot on the FM-1). The preview runs the shared engine instance.
+
 ## 0.4 beta (2026-11-22)
 
 - **OSC B modifier**: its own slot beside OSC A's 16 modifiers. B MODE picks FM from A, PM from A, sync to A, ring with
