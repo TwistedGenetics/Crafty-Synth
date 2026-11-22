@@ -105,6 +105,22 @@ export class Device {
   }
   async select(slot) { await this.send(CMD.SELECT, slot2(slot)); }
   async resetPreset(slot) { await this.send(CMD.PRESET_RESET, slot2(slot), 6000); }
+  async getBank(u) {                       // a user bank from flash: { name, wave } or null if it's empty
+    const out = new Uint8Array(2576);
+    let n = 0;
+    for (let c = 0; c * CHUNK < out.length; c++) {
+      const len = Math.min(CHUNK, out.length - c * CHUNK), b = await this.send(CMD.WGET, [u, c]);
+      if (b.length <= 2) return null;
+      out.set(unpack7(b.slice(2), len), c * CHUNK);
+      n += len;
+    }
+    if (n !== out.length || out[0] !== 0xc7 || out[1] !== 1) return null;
+    let name = "";
+    for (let i = 2; i < 15 && out[i]; i++) name += String.fromCharCode(out[i]);
+    const dv = new DataView(out.buffer), wave = new Int16Array(5 * 256);
+    for (let i = 0; i < wave.length; i++) wave[i] = dv.getInt16(16 + 2 * i, true);
+    return { name, wave };
+  }
   async putBank(u, bytes) {
     for (let c = 0; c * CHUNK < bytes.length; c++)
       await this.send(CMD.WPUT, [u, c, ...pack7(bytes.slice(c * CHUNK, (c + 1) * CHUNK))]);

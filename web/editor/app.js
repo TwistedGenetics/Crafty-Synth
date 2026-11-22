@@ -43,7 +43,8 @@ const rgba = (hex, a) => {
 const patch = new Uint8Array(128);    // cr_patch_t v2: name[12], p[96], steps, magic, ver, root, step[16]
 const O_STEPS = 108, O_MAGIC = 109, O_VER = 110, O_ROOT = 111, O_STEP = 112;
 const P = (k) => patch[12 + PI[k]];
-const ubank = [null, null];
+const ubank = new Array(32).fill(null);      // the user banks as the editor knows them (null: plays bank 1)
+const ubankName = new Array(32).fill("");
 let cur = 0;
 const dev = new Device();
 let ctx = null, node = null, wasm = null;
@@ -560,67 +561,109 @@ function renderUbankSlots() {
   for (let u = 0; u < 32; u++) sel.append(el("option", { value: u, textContent: `USER ${u + 1}${ubankUsed[u] ? " (used)" : ""}` }));
   sel.value = v;
 }
+let showUbank = () => {};
 function buildUbanks() {
-  // one importer: a WAV in, five frames picked, sent to any of the 32 user banks (banks 10-41 on OSC A and B)
+  // one importer: pick a user bank (banks 10-41 on OSC A and B), see what it holds, open a WAV to replace it,
+  // pick five frames, send. Changing the bank drops an unsent WAV and puts the old bank's waves back.
   const box = $("ubanks");
-  let table = null, picksU = [0, 0, 0, 0, 0], data = null;
-  const name = el("input", { type: "text", value: "MY TABLE", maxLength: 13 });
+  let table = null, picksU = [0, 0, 0, 0, 0], data = null, at = 0, before = null;
+  const name = el("input", { type: "text", value: "", maxLength: 13 });
   const file = el("input", { type: "file", accept: ".wav,audio/wav" });
   const slot = el("select", { id: "ubslot" });
   const frames = el("div", { class: "frames" });
-  const info = el("span", { textContent: "Open a WAV wavetable (Serum, Vital, or a single cycle).", class: "status" });
+  const info = el("span", { class: "status" });
   const send = el("button", { textContent: "SEND TO FM-1", disabled: true });
   const view = el("canvas", { class: "view" });
   const cvs = [], rng = [];
   for (let k = 0; k < 5; k++) {
-    const c = el("canvas"), r = el("input", { type: "range", min: 0, max: 0, value: 0 }), lab = el("span", { textContent: `WAVE ${k + 1}` });
+    const c = el("canvas"), r = el("input", { type: "range", min: 0, max: 0, value: 0, disabled: true }), lab = el("span", { textContent: `WAVE ${k + 1}` });
     r.oninput = () => { picksU[k] = +r.value; lab.textContent = `WAVE ${k + 1}: FRAME ${picksU[k] + 1}`; update(); };
     cvs.push(c); rng.push([r, lab]);
     frames.append(el("div", {}, c, r, lab));
   }
-  function update() {
-    if (!table) return;
-    const u = +slot.value;
-    data = makeBank(table, picksU);
-    ubank[u] = data;
+  function draw(u, d) {
     drawTable(view, 9 + u, 64, T.acc);
     cvs.forEach((c, k) => {
-      const { g, w, h } = fitCanvas(c), d = data.subarray(k * N, (k + 1) * N), pts = [];
-      for (let x = 0; x <= w; x++) pts.push([x, h / 2 - (d[Math.min(N - 1, Math.floor((x / w) * N))] / PEAK) * h * 0.42]);
+      const { g, w, h } = fitCanvas(c);
+      if (!d) return;
+      const s = d.subarray(k * N, (k + 1) * N), pts = [];
+      for (let x = 0; x <= w; x++) pts.push([x, h / 2 - (s[Math.min(N - 1, Math.floor((x / w) * N))] / PEAK) * h * 0.42]);
       g.fillStyle = rgba(T.acc, 0.25); g.beginPath(); g.moveTo(0, h / 2);
       for (const [x, y] of pts) g.lineTo(x, y);
       g.lineTo(w, h / 2); g.fill();
       g.strokeStyle = T.acc; g.lineWidth = 2; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
     });
-    post({ t: "ubank", u, data });
+  }
+  function put(u, d) {                          // into the editor's engine (the preview), or back to bank 1
+    ubank[u] = d;
+    if (wasm) post({ t: "ubank", u, data: d || new Int16Array(wasm.memory.buffer, wasm.cw_wave(0), 5 * N).slice() });
     refresh();
   }
-  slot.onchange = update;
+  function show() {                             // the bank as it is, no WAV open
+    const u = at;
+    table = null; data = null; before = null; file.value = "";
+    send.disabled = true;
+    rng.forEach(([r, lab], k) => { r.max = 0; r.value = 0; r.disabled = true; lab.textContent = `WAVE ${k + 1}`; });
+    name.value = ubankName[u] || (ubank[u] ? "" : "MY TABLE");
+    info.textContent = ubank[u] ? `USER ${u + 1}${ubankName[u] ? ": " + ubankName[u] : ""}. Open a WAV to replace it.`
+      : `USER ${u + 1} is empty (it plays bank 1). Open a WAV (Serum, Vital, or a single cycle) to fill it.`;
+    draw(u, ubank[u] || waveData(0));
+  }
+  showUbank = (u) => { if (u === at && !table) show(); };
+  function update() {
+    if (!table) return;
+    data = makeBank(table, picksU);
+    put(at, data);
+    draw(at, data);
+  }
+  slot.onchange = () => {
+    if (table && before !== undefined) put(at, before);   // the unsent WAV leaves; the bank gets its waves back
+    at = +slot.value;
+    show();
+  };
   file.onchange = async () => {
+    if (!file.files[0]) return;
     try {
-      table = parseWav(await file.files[0].arrayBuffer());
+      const t = parseWav(await file.files[0].arrayBuffer());
+      if (!table) before = ubank[at];
+      table = t;
       picksU = defaultPicks(table.frames);
-      rng.forEach(([r, lab], k) => { r.max = table.frames - 1; r.value = picksU[k]; lab.textContent = `WAVE ${k + 1}: FRAME ${picksU[k] + 1}`; });
+      rng.forEach(([r, lab], k) => { r.disabled = false; r.max = table.frames - 1; r.value = picksU[k]; lab.textContent = `WAVE ${k + 1}: FRAME ${picksU[k] + 1}`; });
       name.value = file.files[0].name.replace(/\.wav$/i, "").toUpperCase().slice(0, 13);
-      info.textContent = `${table.frames} frame${table.frames > 1 ? "s" : ""} of ${table.frameSize} samples. Pick a bank on OSC A or B to hear it.`;
+      info.textContent = `${table.frames} frame${table.frames > 1 ? "s" : ""} of ${table.frameSize} samples, previewing in USER ${at + 1}. Send to keep it.`;
       send.disabled = false;
       update();
     } catch (e) { info.textContent = e.message; }
   };
   send.onclick = async () => {
     if (!dev.connected) return status("Connect the FM-1 first.");
-    const u = +slot.value;
+    const u = at;
     try {
       status(`Sending USER ${u + 1}...`);
       await dev.putBank(u, bankBytes(name.value, data));
       ubankUsed[u] = true;
+      ubankName[u] = name.value.toUpperCase().slice(0, 13);
       renderUbankSlots();
+      before = data;                              // it's the bank now: changing slot keeps it
       status(`USER ${u + 1} is on the FM-1.`);
     } catch (e) { status(e.message); }
   };
   box.append(el("div", { class: "ubank" }, el("div", { class: "row" }, file, el("label", {}, "INTO ", slot), name, send),
     view, frames, info));
   renderUbankSlots();
+  show();
+}
+async function readUserBanks() {                // what the FM-1's user banks hold, so the preview plays them
+  for (let u = 0; u < 32; u++) {
+    if (!dev.connected) return;
+    let b = null;
+    if (ubankUsed[u]) b = await dev.getBank(u).catch(() => null);
+    ubankName[u] = b ? b.name : "";
+    ubank[u] = b ? b.wave : null;
+    if (wasm) post({ t: "ubank", u, data: b ? b.wave : new Int16Array(wasm.memory.buffer, wasm.cw_wave(0), 5 * N).slice() });
+    showUbank(u);
+  }
+  refresh();
 }
 
 /* --------------------------------------------------------------------------------------------- device --- */
@@ -637,8 +680,10 @@ async function connect() {
     await pull();
     await readUserNames();
     $("slot").value = cur >= 64 ? cur : String(64 + Math.max(0, userNames.indexOf(null)));
-    status("Connected");
     renderUbankSlots();
+    status("Connected: reading the user wavetables...");
+    await readUserBanks();
+    status("Connected");
   } catch (e) { status(e); }
 }
 async function pull() { loadBytes((await dev.getPatch(0x3fff)).bytes); }

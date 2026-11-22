@@ -16,6 +16,8 @@
 - GLO → SETUP shows the audio's CPU load.
 - The delay's longest time is now about 0.74 s (the reverb took the rest of its memory).
 - The editor speaks protocol 2: it needs the FM-1 on 0.4.
+- Editor: each user wavetable slot shows and plays its own waves. Changing slot no longer copies the open WAV into it,
+  and on connecting the editor reads the banks already on the FM-1.
 
 ## 0.3 beta (2026-11-22)
 
