@@ -1,3 +1,6 @@
 [submodule "x0x-firmware"]
 	path = x0x-firmware
 	url = https://github.com/charlesvestal/fm1-x0x.git
+[submodule "external/mpc-vst-plugins"]
+	path = external/mpc-vst-plugins
+	url = https://github.com/sd88me/mpc-vst-plugins

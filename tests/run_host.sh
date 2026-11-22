@@ -26,6 +26,12 @@ echo 'int main(void){return 0;}' > build/host/san.c
 $CC $SAN build/host/san.c -o build/host/san 2>/dev/null || SAN=""
 # shellcheck disable=SC2086
 $CC $W $SAN -Isrc/host tests/host/inst_test.c src/host/cr_inst.c src/host/cr_proto.c $CORE -lm -o build/host/inst_test
+# the MPC plugin's engine (ports/mpc) through the toolkit's engine interface
+python3 tools/gen_presets.py --keys build/gen/cr_keys.h
+# shellcheck disable=SC2086
+$CC $W $SAN -Wno-unused-parameter -Isrc/host -Iports/mpc -Iexternal/mpc-vst-plugins/wrapper tests/host/mpc_test.c \
+    ports/mpc/cr_mpc.c src/host/cr_inst.c $CORE -lm -o build/host/mpc_test
+build/host/mpc_test build/host
 build/host/inst_test
 # shellcheck disable=SC2086
 $CC $W -Wno-unused-parameter -Wno-sign-compare -Ix0x-firmware/firmware/src tests/host/cr_host.c $CORE -o build/host/cr_host

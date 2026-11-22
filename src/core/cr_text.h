@@ -9,3 +9,5 @@
  * uname gives a user bank's name (u 0..31), "" for one with no name, or 0 for an empty bank; uname may be 0. */
 void cr_param_text(const cr_patch_t *p, uint32_t id, char *b, int lng, const char *(*uname)(void *ctx, uint32_t u),
                    void *ctx);
+/* the page a parameter sits on where its label alone is ambiguous ("FILT EG" for ATTACK), else "" */
+const char *cr_param_page(uint32_t id);

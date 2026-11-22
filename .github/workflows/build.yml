@@ -143,7 +143,7 @@ jobs:
   # engine, so a change that breaks the FM-1 never ships in a plugin.
   plugin-mac:
     needs: firmware
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -156,7 +156,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/juce-8.0.4
-          key: juce-8.0.4-macos
+          key: juce-8.0.4-${{ runner.os }}-${{ runner.arch }}
       - name: JUCE 8.0.4
         run: |
           [ -d ~/juce-8.0.4/modules ] || git clone -q --depth 1 --branch 8.0.4 https://github.com/juce-framework/JUCE ~/juce-8.0.4
@@ -208,12 +208,76 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  # -------------------------------------------------------------------------------------------------------------
+  # The MPC plugin (Gen1 MPCs and the Force: MPC One / One Retro, Live, X, Key 61), after the FM-1 has built:
+  # the community toolkit's VST2 wrapper (external/mpc-vst-plugins) around the same engine, its offline host test,
+  # the armv7 library (glibc 2.31, so MPC OS 2.x and 3.x load it) and the skin, packaged for the MPC plugin installer.
+  mpc:
+    needs: firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python packages
+        run: pip install numpy Pillow
+      - name: params.json and layout.conf in step with the engine
+        run: python3 ports/mpc/make_port.py --check
+      - name: The toolkit's offline test (the VST2 calls MPC makes, under ASan/UBSan)
+        run: bash external/mpc-vst-plugins/tools/test_port.sh ports/mpc/vst.json
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm,arm64
+      - name: Build the plugin (armv7) and the skin
+        run: |
+          set -o pipefail
+          bash external/mpc-vst-plugins/tools/build_port.sh ports/mpc/vst.json armv7 2>&1 | grep -v "overlap by" | tail -30
+          SO=ports/mpc/build/craftysynth.so
+          file "$SO"
+          exported=$(readelf --dyn-syms -W "$SO" | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print $8}' | tr '\n' ' ')
+          [ "$exported" = "VSTPluginMain " ] || { echo "::error::exports $exported"; exit 1; }
+          glibc=$(readelf -V "$SO" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)
+          echo "::notice title=MPC plugin::$(stat -c %s "$SO") bytes, highest glibc $glibc"
+      - name: Skin preview
+        run: |
+          mkdir -p dist preview
+          python3 external/mpc-vst-plugins/tools/studio.py preview \
+            "ports/mpc/build/skin/Twisted Genetics - VST - Crafty Synth/Plugin Skins" -o preview/page_%d.png >/dev/null
+      - name: Package (the MPC plugin installer's zip)
+        run: |
+          v=$(tr -d ' \n' < VERSION)
+          python3 external/mpc-vst-plugins/tools/release.py \
+            --so ports/mpc/build/craftysynth.so \
+            --skin "ports/mpc/build/skin/Twisted Genetics - VST - Crafty Synth" \
+            --entry ports/mpc/build/pluginlist-entry.xml \
+            --version "$v.0" \
+            --repo TwistedGenetics/Crafty-Synth --license GPL-3.0-only --id crafty-synth \
+            --about "Crafty Synth: the M-VAVE FM-1's CRAFTsynth-style wavetable synth as an MPC plugin." \
+            -o dist
+          for z in dist/*.zip; do mv "$z" "dist/Crafty-Synth-$v-mpc-armv7.zip"; done
+          python3 external/mpc-vst-plugins/tools/catalog_check.py dist/*.zip --catalog --expect-id crafty-synth \
+            --expect-repo TwistedGenetics/Crafty-Synth || echo "::warning::catalog check (listing only; the zip installs)"
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mpc-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mpc-skin-preview-${{ github.sha }}
+          path: preview/
+
   release:
     if: >-
       startsWith(github.ref, 'refs/tags/v') ||
       (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
       startsWith(github.ref, 'refs/heads/rebuild-v')
-    needs: [firmware, web]
+    needs: [firmware, web, plugin-mac, mpc]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -224,6 +288,16 @@ jobs:
         with:
           name: firmware-${{ github.sha }}
           path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-mac-${{ github.sha }}
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: mpc-${{ github.sha }}
+          path: dist
+      - name: Checksums (every file)
+        run: cd dist && sha256sum *.fwsc *.zip > SHA256SUMS && cat SHA256SUMS
       - name: Version
         id: ver
         run: |
@@ -249,6 +323,8 @@ jobs:
           make_latest: true
           files: |
             dist/Crafty-Synth-${{ steps.ver.outputs.version }}.fwsc
+            dist/Crafty-Synth-${{ steps.ver.outputs.version }}-mac.zip
+            dist/Crafty-Synth-${{ steps.ver.outputs.version }}-mpc-armv7.zip
             dist/SHA256SUMS
           body: |
             Crafty Synth — a CRAFTsynth 2.0-style monophonic wavetable synth for the **M-VAVE FM-1**: 8 oscillators, 16 oscillator modifiers, spread into unison or chords, a morphing filter, three envelopes, two LFOs, an 8-slot mod matrix, glide, distortion, delay and a sequenced arpeggiator. 64 presets; your own wavetables from Serum / Vital WAVs.

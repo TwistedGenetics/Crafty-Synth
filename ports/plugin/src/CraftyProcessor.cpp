@@ -69,20 +69,12 @@ static juce::String valueText(int id, int v)
 static juce::String paramName(int id)
 {
     // the screen's label, with the page it sits on where the label alone is ambiguous (ATTACK x3, RATE x3 ...)
-    static const char *const page[CR_NP] = {
-        "", "", "OSC", "", "", "", "", "OSC", "OSC B", "OSC B", "", "", "", "FILTER", "FILTER", "", "FILT EG",
-        "FILT EG", "FILT EG", "FILT EG", "AMP EG", "AMP EG", "AMP EG", "AMP EG", "", "MOD EG", "MOD EG", "MOD EG",
-        "MOD EG", "LFO 1", "LFO 1", "LFO 1", "LFO 1", "LFO 2", "LFO 2", "LFO 2", "LFO 2", "", "", "DELAY", "DELAY",
-        "DELAY", "", "LFO 1", "LFO 2", "MOD EG", "NOTE", "VELO", "MOD WHL", "EXPR", "AFTTCH", "LFO 1", "LFO 2",
-        "MOD EG", "NOTE", "VELO", "MOD WHL", "EXPR", "AFTTCH", "", "", "ARP", "", "", "FILTER", "REVERB", "REVERB",
-        "REVERB", "", "REVERB", "REVERB", "REVERB", "", "", "", "", "", "", ""};
     juce::String n(CR_P[id].name);
-    juce::String pg(id < CR_NP ? page[id] : "");
+    juce::String pg(cr_param_page((uint32_t)id));
     if (pg.isNotEmpty() && !n.startsWithIgnoreCase(pg))
         n = pg + " " + n;
     return n;
 }
-static_assert(CR_NP == 79, "paramName's pages: one per parameter");
 
 CraftyProcessor::CraftyProcessor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),

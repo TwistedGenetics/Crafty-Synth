@@ -1,0 +1,52 @@
+{
+ "name": "Crafty Synth",
+ "vendor": "Twisted Genetics",
+ "uid": "CrSy",
+ "version": 1000,
+ "so": "craftysynth.so",
+ "params": "params.json",
+ "layout": "layout.conf",
+ "title_font": "fonts/BarlowSemiCondensed-Bold.ttf",
+ "programs": {
+  "param": "preset"
+ },
+ "cc": false,
+ "defines": {
+  "MODULE_SUBDIR": "\"data\"",
+  "HAS_SONG_POS": 1,
+  "SAMPLE_ACCURATE": 1,
+  "PARAM_TEXT_MAX": 32
+ },
+ "build": {
+  "root": "../..",
+  "sources": [
+   "ports/mpc/cr_mpc.c",
+   "src/host/cr_inst.c",
+   "src/core/cr_patch.c",
+   "src/core/cr_arp.c",
+   "src/core/cr_text.c",
+   "src/dsp/cr_synth.c",
+   "src/dsp/cr_wt.c",
+   "src/dsp/cr_filter.c",
+   "src/dsp/cr_fx.c"
+  ],
+  "cflags": [
+   "-O2",
+   "-Isrc/core",
+   "-Isrc/dsp",
+   "-Isrc/host",
+   "-Iports/mpc",
+   "-Iports/mpc/build/gen"
+  ],
+  "cflags_arm": [
+   "-mfpu=neon",
+   "-mfloat-abi=hard"
+  ],
+  "libs": [
+   "-lm"
+  ]
+ },
+ "targets": [
+  "armv7"
+ ]
+}

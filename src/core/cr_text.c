@@ -202,3 +202,14 @@ void cr_param_text(const cr_patch_t *p, uint32_t id, char *b, int lng, const cha
     default: tx_num(b, (int32_t)v, 0); break;
     }
 }
+
+/* the page a parameter sits on, where its label alone is ambiguous (ATTACK x3, RATE x3 ...): "FILT EG", or "" */
+static const char *const TX_PAGE[CR_NP] = {
+    "", "", "OSC", "", "", "", "", "OSC", "OSC B", "OSC B", "", "", "", "FILTER", "FILTER", "", "FILT EG",
+    "FILT EG", "FILT EG", "FILT EG", "AMP EG", "AMP EG", "AMP EG", "AMP EG", "", "MOD EG", "MOD EG", "MOD EG",
+    "MOD EG", "LFO 1", "LFO 1", "LFO 1", "LFO 1", "LFO 2", "LFO 2", "LFO 2", "LFO 2", "", "", "DELAY", "DELAY",
+    "DELAY", "", "LFO 1", "LFO 2", "MOD EG", "NOTE", "VELO", "MOD WHL", "EXPR", "AFTTCH", "LFO 1", "LFO 2",
+    "MOD EG", "NOTE", "VELO", "MOD WHL", "EXPR", "AFTTCH", "", "", "ARP", "", "", "FILTER", "REVERB", "REVERB",
+    "REVERB", "", "REVERB", "REVERB", "REVERB", "", "", "", "", "", "", ""};
+_Static_assert(sizeof TX_PAGE / sizeof TX_PAGE[0] == CR_NP, "a page for every parameter");
+const char *cr_param_page(uint32_t id) { return id < CR_NP ? TX_PAGE[id] : ""; }
