@@ -252,7 +252,7 @@ const label = (i) => (i < 64 ? `${(i >> 3) + 1}-${(i & 7) + 1}` : `U${((i - 64) 
 function buildPresetList() {
   const sel = $("preset"), slot = $("slot");
   sel.replaceChildren(); slot.replaceChildren();
-  const fg = el("optgroup", { label: "FACTORY" }), ug = el("optgroup", { label: "USER (on the FM-1)" });
+  const fg = el("optgroup", { label: "FACTORY" }), ug = el("optgroup", { label: inPlugin ? "USER" : "USER (on the FM-1)" });
   M.presets.forEach((p, i) => fg.append(el("option", { value: i, textContent: `${label(i)}  ${p.name}` })));
   for (let i = 64; i < 192; i++) {
     const n = userNames[i - 64];
@@ -442,6 +442,7 @@ async function startMain(bytes) {     // the fallback: the engine on this thread
   return { port: { postMessage: (d) => handleMain(e, d) }, connect: (x) => sp.connect(x) };
 }
 function ensureAudio() {
+  if (inPlugin) return Promise.resolve();          // the plugin plays through the host, not the page
   if (starting) return starting;
   starting = (async () => {
     try {
@@ -482,6 +483,7 @@ function ensureAudio() {
   return starting;
 }
 async function wake() {               // a browser may suspend audio (a tab in the background, iOS): resume it
+  if (inPlugin) return;
   if (!ctx) return ensureAudio();
   if (ctx.state !== "running") { try { await ctx.resume(); } catch (e) { /* the next gesture tries again */ } }
 }
@@ -572,7 +574,7 @@ function buildUbanks() {
   const slot = el("select", { id: "ubslot" });
   const frames = el("div", { class: "frames" });
   const info = el("span", { class: "status" });
-  const send = el("button", { textContent: "SEND TO FM-1", disabled: true });
+  const send = el("button", { textContent: inPlugin ? "STORE" : "SEND TO FM-1", disabled: true });
   const view = el("canvas", { class: "view" });
   const cvs = [], rng = [];
   for (let k = 0; k < 5; k++) {
@@ -636,7 +638,7 @@ function buildUbanks() {
     } catch (e) { info.textContent = e.message; }
   };
   send.onclick = async () => {
-    if (!dev.connected) return status("Connect the FM-1 first.");
+    if (!dev.connected) return status(inPlugin ? "The plugin isn't ready." : "Connect the FM-1 first.");
     const u = at;
     try {
       status(`Sending USER ${u + 1}...`);
@@ -645,7 +647,7 @@ function buildUbanks() {
       ubankName[u] = name.value.toUpperCase().slice(0, 13);
       renderUbankSlots();
       before = data;                              // it's the bank now: changing slot keeps it
-      status(`USER ${u + 1} is on the FM-1.`);
+      status(inPlugin ? `USER ${u + 1} stored.` : `USER ${u + 1} is on the FM-1.`);
     } catch (e) { status(e.message); }
   };
   box.append(el("div", { class: "ubank" }, el("div", { class: "row" }, file, el("label", {}, "INTO ", slot), name, send),
@@ -670,8 +672,12 @@ async function readUserBanks() {                // what the FM-1's user banks ho
 function status(m) { $("status").textContent = m instanceof Error ? m.message : m; }
 async function connect() {
   try {
-    if (!navigator.requestMIDIAccess) throw new Error("This browser has no Web MIDI: use Chrome or Edge.");
-    const info = await dev.connect(await navigator.requestMIDIAccess({ sysex: true }));
+    let info;
+    if (inPlugin) info = await dev.connectPlugin();
+    else {
+      if (!navigator.requestMIDIAccess) throw new Error("This browser has no Web MIDI: use Chrome or Edge.");
+      info = await dev.connect(await navigator.requestMIDIAccess({ sysex: true }));
+    }
     $("devbox").hidden = false;
     $("devname").textContent = info.name;
     status("Connected: reading the user presets...");
@@ -756,7 +762,12 @@ try { const s = localStorage.getItem("crafty-theme"); if (s !== null) th = +s; }
 $("theme").value = th;
 setTheme(th);
 addEventListener("resize", () => drawAll());
-factory(0);
+if (inPlugin) {
+  document.body.classList.add("plugin");
+  $("save").textContent = "SAVE";
+  $("pull").textContent = "RELOAD";
+  connect();
+} else factory(0);
 fetch("crafty.wasm").then((r) => r.arrayBuffer()).then((b) => WebAssembly.instantiate(b, {})).then(({ instance }) => {
   wasm = instance.exports;
   refresh();

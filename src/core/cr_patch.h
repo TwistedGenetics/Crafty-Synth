@@ -4,6 +4,9 @@
  * knob turned sends it. The few that the CRAFTsynth has no CC for (tempo, arp rate) use free CC numbers.
  * Copyright (C) 2026 Jamie (TwistedGenetics). */
 #pragma once
+#if defined(__cplusplus) && !defined(_Static_assert)
+#define _Static_assert static_assert     /* the plugins include these headers from C++ */
+#endif
 #include <stdint.h>
 
 /* parameter ids (the patch's byte order) */

@@ -9,6 +9,9 @@ export const WORKING = 0x3fff, PATCH_BYTES = 128, UBANK_BYTES = 2576, CHUNK = 25
 const slot2 = (s) => [s & 0x7f, (s >> 7) & 0x7f];
 const HDR = [0xf0, 0x7d, 0x46, 0x4c];
 export const FM1_PORT = /fm-?1|crafty|felucca/i;
+// inside the AU / VST3 plugin (ports/plugin): JUCE's WebView gives window.__JUCE__, and the same MIDI goes to the
+// plugin as "crafty-midi" events instead of out of a MIDI port
+export const inPlugin = typeof window !== "undefined" && !!(window.__JUCE__ && window.__JUCE__.backend);
 
 export function pack7(b) {
   const out = [];
@@ -43,6 +46,20 @@ export class Device {
     this.onnote = null;
   }
   get connected() { return !!(this.input && this.output); }
+  get target() { return inPlugin ? "plugin" : "FM-1"; }
+  async connectPlugin() {
+    const be = window.__JUCE__.backend;
+    if (!this.pluginListening) {
+      be.addEventListener("crafty-midi", (b) => this.recv(Uint8Array.from(b)));
+      this.pluginListening = true;
+    }
+    this.input = { plugin: true };
+    this.output = { send: (f) => be.emitEvent("crafty-midi", Array.from(f)) };
+    this.info = await this.getInfo();
+    this.channel = 0;
+    this.onchange();
+    return this.info;
+  }
   async connect(access) {
     const ins = [...access.inputs.values()], outs = [...access.outputs.values()];
     this.input = ins.find((p) => FM1_PORT.test(p.name)) || null;
@@ -75,7 +92,7 @@ export class Device {
     return new Promise((resolve, reject) => {
       const w = { cmd, resolve, timer: setTimeout(() => {
         this.waiting = this.waiting.filter((x) => x !== w);
-        reject(new Error("The FM-1 didn't answer. Is Crafty Synth installed on it?"));
+        reject(new Error(inPlugin ? "The plugin didn't answer." : "The FM-1 didn't answer. Is Crafty Synth installed on it?"));
       }, timeout) };
       this.waiting.push(w);
       this.output.send(frame);
@@ -101,7 +118,7 @@ export class Device {
   async putPatch(slot, bytes) {
     const b = await this.send(CMD.PPUT, [...slot2(slot), ...pack7(bytes)], 6000);
     if (b[2] === 2) throw new Error("factory presets can't be overwritten: save to a user slot (U1-1 and up)");
-    if (b[2] !== 0) throw new Error("the FM-1 couldn't write its flash");
+    if (b[2] !== 0) throw new Error(`the ${this.target} couldn't store it`);
   }
   async select(slot) { await this.send(CMD.SELECT, slot2(slot)); }
   async resetPreset(slot) { await this.send(CMD.PRESET_RESET, slot2(slot), 6000); }
@@ -125,6 +142,6 @@ export class Device {
     for (let c = 0; c * CHUNK < bytes.length; c++)
       await this.send(CMD.WPUT, [u, c, ...pack7(bytes.slice(c * CHUNK, (c + 1) * CHUNK))]);
     const r = await this.send(CMD.WCOMMIT, [u], 8000);
-    if (r[1] !== 0) throw new Error(r[1] === 2 ? "the FM-1 got a broken bank" : "the FM-1 couldn't write its flash");
+    if (r[1] !== 0) throw new Error(r[1] === 2 ? `the ${this.target} got a broken bank` : `the ${this.target} couldn't store it`);
   }
 }

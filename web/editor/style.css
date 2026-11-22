@@ -80,3 +80,6 @@ a { color: var(--acc); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 .meter { width: 70px; height: 12px; border-radius: 3px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
 .meter div { height: 100%; width: 0; background: var(--acc); }
+
+/* inside the AU / VST3 plugin: the host plays the sound and the plugin is always "connected" */
+body.plugin #audio, body.plugin #connect, body.plugin .meter, body.plugin a[href*="flasher"] { display: none; }
