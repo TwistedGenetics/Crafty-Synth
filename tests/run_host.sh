@@ -16,10 +16,17 @@ python3 tools/gen_cr_font.py build/gen/cr_font.h >/dev/null
 [ -f build/gen/x0x/felucca_font.h ] || python3 x0x-firmware/tools/gen_font.py build/gen/x0x/felucca_font.h >/dev/null
 # the firmware's own rules: C99, no doubles anywhere (-Wdouble-promotion), every warning an error
 W="-O2 -std=c99 -Wall -Wextra -Werror -Wdouble-promotion -Wno-unused-function -Isrc/core -Isrc/dsp -Isrc/app -Ibuild/gen -Ibuild/gen/x0x"
-CORE="src/core/cr_patch.c src/core/cr_arp.c src/dsp/cr_synth.c src/dsp/cr_wt.c src/dsp/cr_filter.c src/dsp/cr_fx.c"
+CORE="src/core/cr_patch.c src/core/cr_arp.c src/core/cr_text.c src/dsp/cr_synth.c src/dsp/cr_wt.c src/dsp/cr_filter.c src/dsp/cr_fx.c"
 # shellcheck disable=SC2086
 $CC $W tests/host/synth_test.c $CORE -o build/host/synth_test
 build/host/synth_test build/host
+# the plugins' shared instance and protocol (src/host), under the sanitizers where the compiler has them
+SAN="-fsanitize=address,undefined"
+echo 'int main(void){return 0;}' > build/host/san.c
+$CC $SAN build/host/san.c -o build/host/san 2>/dev/null || SAN=""
+# shellcheck disable=SC2086
+$CC $W $SAN -Isrc/host tests/host/inst_test.c src/host/cr_inst.c src/host/cr_proto.c $CORE -lm -o build/host/inst_test
+build/host/inst_test
 # shellcheck disable=SC2086
 $CC $W -Wno-unused-parameter -Wno-sign-compare -Ix0x-firmware/firmware/src tests/host/cr_host.c $CORE -o build/host/cr_host
 for s in tests/host/scenarios/*.txt; do

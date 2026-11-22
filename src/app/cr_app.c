@@ -21,6 +21,8 @@
  * Copyright (C) 2026 Jamie (TwistedGenetics). */
 #include "cr_app.h"
 #include "cr_presets.h"
+#include "cr_user.h"
+#include "cr_text.h"
 #include "cr_font.h"
 #include "cr_math.h"
 
@@ -36,18 +38,8 @@ static cr_arp_t cr_arp;
 static int16_t cr_mem[CR_SYN_MEM] X0X_POOL;      /* the synth's memory (delay, reverb, chorus, comb): 144 KB */
 static cr_wtbank_t cr_tab[3] X0X_POOL;           /* banks ready to play: Wave 1's, Wave 2's, one being built */
 static uint8_t cr_tab_bank[3] = {0xFF, 0xFF, 0xFF};
-/* the user area in flash: 128 user presets (4 sectors of 32), then 32 user wavetable banks (a sector each) */
-typedef struct {
-    uint8_t magic, ver;
-    char name[14];
-    int16_t w[5][CR_WT_N];
-} cr_ubank_t;                                    /* a user wavetable bank (Serum import): 2,576 B */
-#define CR_UBANK_MAGIC 0xC7u
-#define CR_FL_PRESETS 0x00000u                   /* 128 x 128 B */
-#define CR_FL_BANKS 0x04000u                     /* 32 x 4 KB */
-#define CR_SECTOR 0x1000u
+/* the user area in flash: src/core/cr_user.h */
 _Static_assert(CR_FL_BANKS + CR_NUBANK * CR_SECTOR <= CR_FLASH_SIZE, "the user area");
-_Static_assert(CR_NUSER * CR_PATCH_BYTES <= CR_FL_BANKS, "the user presets' sectors");
 static cr_ubank_t cr_ubw X0X_POOL;               /* a bank coming in from the editor */
 static uint8_t cr_sec[CR_SECTOR] X0X_POOL;       /* a sector being rewritten */
 static const cr_ubank_t *cr_ubank(uint32_t u)    /* user bank u in flash, or 0 (empty) */
@@ -365,14 +357,16 @@ static void cr_load(uint32_t slot)
 
 /* -------------------------------------------------------------------------------------------- the notes --- */
 /* out of the arp, or straight from the keys / MIDI: the synth (local) and MIDI out */
-static void cr_arp_on(uint32_t n, uint32_t v)
+static void cr_arp_on(cr_arp_t *a, uint32_t n, uint32_t v)
 {
+    (void)a;
     cr_synth_on(&cr_syn, n, v);
     if (cr_g.arp_out)
         cr_midi3(0x90u | cr_g.midi_ch, n, v);
 }
-static void cr_arp_off(uint32_t n)
+static void cr_arp_off(cr_arp_t *a, uint32_t n)
 {
+    (void)a;
     cr_synth_off(&cr_syn, n);
     if (cr_g.arp_out)
         cr_midi3(0x80u | cr_g.midi_ch, n, 0);
@@ -428,14 +422,7 @@ static uint32_t cr_key_to_note(uint32_t k)
 /* ------------------------------------------------------------------------------------------- the values --- */
 static const char *const CR_OM_SHORT[CR_NOM] = {"PM", "WSYNC", "RING", "TFOLD", "DEREZ", "R/RUN", "GLTCH", "WAMP",
     "FM", "SYNC", "MIN", "SFOLD", "CRUSH", "SCRUN", "LO-FI", "VOCAL"};
-static const char *const CR_SHAPE_SHORT[10] = {"", "MAJ", "MIN", "MAJ6", "SUS4", "5TH", "5+8", "8+15", "8-8", "-8-15"};
 static const char *const CR_NOTE[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-static const char *const CR_LSHAPE[5] = {"SINE", "TRI", "SAW", "SQUARE", "S+H"};
-static const char *const CR_L1SYNC_S[16] = {"1/16", "1/8", "3/16", "1/4", "3/8", "1/2", "3/4", "1", "3/2", "2", "3",
-                                            "4", "6", "8", "12", "16"};
-static const char *const CR_L2SYNC_S[8] = {"1/16", "1/8", "1/4", "1/2", "1", "5/4", "2", "4"};
-static const char *const CR_L2ROOT_S[8] = {"R/8", "R/4", "R/2", "R", "Rx1.5", "Rx2", "Rx2.5", "Rx3"};
-static const char *const CR_DSYNC_S[9] = {"1/16", "1/12", "1/8", "1/8D", "1/4", "1/2", "3/4", "4/4", "6/4"};
 
 static const char *cr_plabel(uint32_t p)
 {
@@ -463,21 +450,15 @@ static const char *cr_plabel(uint32_t p)
     }
 }
 
-static void cr_time(char *b, float s)
-{
-    if (s < 1.f) {
-        cr_num(b, (int32_t)(s * 1000.f + 0.5f), 0);
-        cr_cat(b, "MS");
-    } else {
-        cr_dec(b, s, 1);
-        cr_cat(b, "S");
-    }
-}
-
 /* parameter p's value as text: short (a knob's cell) or long (shown big) */
+static const char *cr_uname(void *ctx, uint32_t u)   /* a user bank's name for cr_param_text */
+{
+    const cr_ubank_t *k = cr_ubank(u);
+    (void)ctx;
+    return k ? k->name : 0;
+}
 static void cr_ptext(uint32_t p, char *b, int lng)
 {
-    uint32_t v = p < CR_NP ? cr_p.p[p] : 0u;
     b[0] = 0;
     if (p >= G_NONE) {
         switch (p) {
@@ -504,136 +485,7 @@ static void cr_ptext(uint32_t p, char *b, int lng)
         }
         return;
     }
-    switch (CR_P[p].kind) {
-    case CR_K_BIP: cr_num(b, (int32_t)v - 64, 1); break;
-    case CR_K_MIX:
-        if (v == 0u) cr_cpy(b, "W1");
-        else if (v == 127u) cr_cpy(b, "W2");
-        else cr_num(b, (int32_t)v, 0);
-        break;
-    case CR_K_TIME: { float t = (float)v / 127.f; cr_time(b, 0.001f + 4.f * t * t * t); break; }
-    case CR_K_PCT: cr_num(b, (int32_t)(v * 100u + 63u) / 127, 0); cr_cat(b, "%"); break;
-    case CR_K_BANK: {
-        uint32_t bk = cr_bank_of(v, p == CR_W2BANK);
-        if (lng) {
-            cr_cpy(b, CR_BANK_NAME[bk]);
-            if (bk >= CR_NBANK && cr_ubank(bk - CR_NBANK) && cr_ubank(bk - CR_NBANK)->name[0]) {
-                char nm[14];
-                uint32_t q;
-                for (q = 0; q < 13u && cr_ubank(bk - CR_NBANK)->name[q]; q++)
-                    nm[q] = cr_ubank(bk - CR_NBANK)->name[q];
-                nm[q] = 0;
-                cr_cpy(b, nm);                   /* a user bank: its name */
-            } else if (bk >= CR_NBANK)
-                cr_cat(b, " (EMPTY)");
-        } else if (bk >= CR_NBANK) {
-            cr_cpy(b, "U");
-            cr_num(b + 1, (int32_t)(bk - CR_NBANK + 1u), 0);
-        } else {
-            cr_cpy(b, "B");
-            cr_num(b + 1, (int32_t)bk + 1, 0);
-        }
-        break;
-    }
-    case CR_K_OMMODE: cr_cpy(b, lng ? CR_OM_NAME[cr_om_of(v)] : CR_OM_SHORT[cr_om_of(v)]); break;
-    case CR_K_SPREAD:
-        if (v < 64u) {
-            if (lng && v) { cr_cpy(b, "UNISON "); cr_num(b + 7, (int32_t)v, 0); }
-            else if (lng) cr_cpy(b, "OFF");
-            else cr_num(b, (int32_t)v, 0);
-        } else
-            cr_cpy(b, lng ? CR_SHAPE_NAME[cr_spread_shape(v)] : CR_SHAPE_SHORT[cr_spread_shape(v)]);
-        break;
-    case CR_K_SEMI: cr_num(b, cr_semi_of(v), 1); if (lng) cr_cat(b, " SEMI"); break;
-    case CR_K_CENT: cr_num(b, ((int32_t)v - 64) * 100 / 63, 1); cr_cat(b, lng ? " CENTS" : "C"); break;
-    case CR_K_OCT: cr_num(b, (int32_t)((v * 7u) >> 7) - 2, 1); break;
-    case CR_K_GLIDE:
-        if (v == 64u)
-            cr_cpy(b, "OFF");
-        else {
-            float g = ((float)v - 64.f) / 63.f;
-            if (g < 0.f)
-                g = -g;
-            if (lng) {
-                cr_cpy(b, v > 64u ? "ALWAYS " : "LEGATO ");
-                cr_time(b + 7, 2.5f * g * g);
-            } else {
-                cr_cpy(b, v > 64u ? "A" : "L");
-                cr_num(b + 1, (int32_t)(g * 99.f + 0.5f), 0);
-            }
-        }
-        break;
-    case CR_K_HZ: {
-        float f = 20.f * cr_exp2f((float)v * (10.f / 127.f));
-        if (f < 1000.f)
-            cr_num(b, (int32_t)(f + 0.5f), 0);
-        else {
-            cr_dec(b, f / 1000.f, 1);
-            cr_cat(b, "K");
-        }
-        if (lng)
-            cr_cat(b, "HZ");
-        break;
-    }
-    case CR_K_MORPH:
-        if (lng) {
-            cr_cpy(b, v < 22u ? "LOW PASS" : v < 50u ? "LOW SHELF" : v < 78u ? "BAND PASS" : v < 106u ? "BP TO HP" : "HIGH PASS");
-        } else
-            cr_cpy(b, v < 22u ? "LP" : v < 50u ? "SHELF" : v < 78u ? "BP" : v < 106u ? "B-H" : "HP");
-        break;
-    case CR_K_LSHAPE: cr_cpy(b, CR_LSHAPE[(v * 4u + 63u) / 127u]); if (!lng && b[3]) b[3] = 0; break;
-    case CR_K_LMODE: cr_cpy(b, v < 42u ? (lng ? "RETRIGGER" : "RTRIG") : v < 84u ? "FREE" : (lng ? "SINGLE" : "ONCE")); break;
-    case CR_K_ONOFF: cr_cpy(b, v >= 64u ? "ON" : "OFF"); break;
-    case CR_K_LRATE1:
-        if (cr_p.p[CR_L1SYNC] >= 64u) {
-            cr_cpy(b, CR_L1SYNC_S[(v * 16u) >> 7]);
-            if (lng) cr_cat(b, " PER BAR");
-        } else {
-            float hz = 0.02f * cr_exp2f((float)v * (10.64f / 127.f));
-            cr_dec(b, hz, hz < 10.f ? 2u : 1u);
-            if (lng) cr_cat(b, " HZ");
-        }
-        break;
-    case CR_K_LRATE2:
-        if (v >= 64u)
-            cr_cpy(b, CR_L2ROOT_S[((v - 64u) * 8u) >> 6]);
-        else if (cr_p.p[CR_L2SYNC] >= 64u) {
-            cr_cpy(b, CR_L2SYNC_S[(v * 8u) >> 6]);
-            if (lng) cr_cat(b, " PER BEAT");
-        } else {
-            float hz = 0.02f * cr_exp2f((float)v * (2.f * 10.64f / 127.f));
-            cr_dec(b, hz, hz < 10.f ? 2u : 1u);
-            if (lng) cr_cat(b, " HZ");
-        }
-        break;
-    case CR_K_DTIME:
-        if (cr_p.p[CR_DSYNC] >= 64u)
-            cr_cpy(b, CR_DSYNC_S[(v * 9u) >> 7]);
-        else
-            cr_time(b, 0.0005f * cr_exp2f((float)v * (10.55f / 127.f)));
-        break;
-    case CR_K_TEMPO: cr_num(b, 40 + 2 * (int32_t)v, 0); if (lng) cr_cat(b, " BPM"); break;
-    case CR_K_ARPRATE: cr_cpy(b, CR_ARPRATE_NAME[(v * 6u) >> 7]); break;
-    case CR_K_DEST: cr_cpy(b, CR_DEST_NAME[v % CR_ND]); break;
-    case CR_K_BMODE: {
-        static const char *const SH[5] = {"FM", "PM", "SYNC", "RING", "FOLD"};
-        cr_cpy(b, lng ? CR_BMODE_NAME[cr_band(v, 5)] : SH[cr_band(v, 5)]);
-        break;
-    }
-    case CR_K_FTYPE: {
-        static const char *const SH[12] = {"SVF", "LADR", "MS20", "303", "SEM", "STNR", "POLI", "FORM", "COMB",
-                                           "PHAS", "DUAL", "DECIM"};
-        cr_cpy(b, lng ? CR_FTYPE_NAME[cr_band(v, 12)] : SH[cr_band(v, 12)]);
-        break;
-    }
-    case CR_K_VMODE: cr_cpy(b, CR_VMODE_NAME[cr_band(v, 6)]); break;
-    case CR_K_ERA: {
-        static const char *const SH[6] = {"OFF", "SP12", "MPC", "S950", "S1K", "AMIGA"};
-        cr_cpy(b, lng ? CR_ERA_NAME[cr_band(v, 6)] : SH[cr_band(v, 6)]);
-        break;
-    }
-    default: cr_num(b, (int32_t)v, 0); break;
-    }
+    cr_param_text(&cr_p, p, b, lng, cr_uname, 0);
 }
 
 /* ------------------------------------------------------------------------------------------- turning --- */

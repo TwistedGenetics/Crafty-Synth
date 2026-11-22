@@ -21,7 +21,7 @@ void cr_arp_init(cr_arp_t *a, const cr_arp_out_t *out)
 static void stop_note(cr_arp_t *a)
 {
     if (a->sounding >= 0) {
-        a->out->off((uint32_t)a->sounding);
+        a->out->off(a, (uint32_t)a->sounding);
         a->sounding = -1;
     }
 }
@@ -90,14 +90,14 @@ static void next_step(cr_arp_t *a, const cr_patch_t *p)
         a->step = (uint8_t)((a->step + 1u) % k);
     }
     if (n >= 0 && n < 128) {
-        a->out->on((uint32_t)n, a->vel);
+        a->out->on(a, (uint32_t)n, a->vel);
         a->sounding = (int16_t)n;
     }
 }
 
 void cr_arp_run(cr_arp_t *a, const cr_patch_t *p, uint32_t n)
 {
-    float len = 44100.f * 60.f / cr_arp_bpm(p) * (float)cr_arp_ticks(p) / 24.f;
+    float len = 44100.f * 60.f / (a->bpm > 0.f ? a->bpm : cr_arp_bpm(p)) * (float)cr_arp_ticks(p) / 24.f;
     if (!a->playing)
         return;
     a->acc += (float)n;

@@ -7,17 +7,20 @@
 #include <stdint.h>
 #include "cr_patch.h"
 
+struct cr_arp;
 typedef struct {
-    void (*on)(uint32_t note, uint32_t vel);
-    void (*off)(uint32_t note);
+    void (*on)(struct cr_arp *a, uint32_t note, uint32_t vel);
+    void (*off)(struct cr_arp *a, uint32_t note);
 } cr_arp_out_t;
 
-typedef struct {
+typedef struct cr_arp {
     const cr_arp_out_t *out;
+    void *user;                        /* the host's, for out (an instance; set after cr_arp_init) */
     uint8_t held[16], nheld, playing, vel, step;
     float acc, gate_at;                /* samples into this step; when its note ends */
     uint32_t ticks;                    /* MIDI clock ticks into this step */
     int16_t sounding;                  /* the note on now, or -1 */
+    float bpm;                         /* a host's tempo (the plugins), or 0: the patch's TEMPO */
 } cr_arp_t;
 
 void cr_arp_init(cr_arp_t *a, const cr_arp_out_t *out);

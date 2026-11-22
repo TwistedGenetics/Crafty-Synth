@@ -3,7 +3,7 @@
 // in WebAssembly), the FM-1 over Web MIDI, user wavetables from WAV files. Copyright (C) 2026 Jamie (TwistedGenetics).
 import M from "./meta.js";
 import { fmt, choices, PI, bankOf, band, bandVal, LISTS } from "./format.js";
-import { Device } from "./device.js";
+import { Device, WORKING, inPlugin } from "./device.js";
 import { parseWav, makeBank, defaultPicks, bankBytes, N, PEAK } from "./serum.js";
 
 const $ = (id) => document.getElementById(id);
@@ -394,7 +394,7 @@ function drawSteps() {
 }
 function pushPatch() {
   post({ t: "patch", bytes: patch.slice() });
-  if (dev.connected) dev.putPatch(127, patch).catch(status);
+  if (dev.connected) dev.putPatch(WORKING, patch).catch(status);
   refresh();
 }
 
