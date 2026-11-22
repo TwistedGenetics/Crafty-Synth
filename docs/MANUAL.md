@@ -1,4 +1,4 @@
-# Crafty Synth manual (0.1)
+# Crafty Synth manual (0.2)
 
 Crafty Synth makes the M-VAVE FM-1 a monophonic wavetable synth after the Modal CRAFTsynth 2.0. This page covers the
 FM-1's panel. For what each part of the engine does, the CRAFTsynth 2.0 manual's "Synthesis engine" chapter applies
@@ -37,7 +37,7 @@ almost word for word; the differences are listed at the end.
 | | OUTPUT | DELAY SYNC · VOLUME · AMP EG (amount, bipolar) · GLIDE |
 | **ARP** | turns the arp on or off, and shows ARP | ARP · TEMPO · RATE · STEPS |
 | **SEQ** | SEQ (the pattern) | STEPS · TEMPO · RATE · ARP |
-| **GLO** | MIDI → KEYS → SETUP | MIDI CH · MIDI IN · CLOCK · BEND / KEYS · SCALE · ROOT · VELO IN / LOCAL · BREATH · ARP OUT |
+| **GLO** | MIDI → KEYS → SETUP | MIDI CH · MIDI IN · CLOCK · BEND / KEYS · SCALE · ROOT · VELO IN / LOCAL · BREATH · ARP OUT · THEME |
 | **SAVE** | SAVE | SLOT · – · LETTER · CHAR |
 | **REC** | | LATCH on / off |
 | **PLAY** | | all notes off (on the SAVE page: INIT, a plain saw patch) |

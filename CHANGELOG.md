@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2 beta (2026-11-22)
+
+- The screen redesigned after Serum 2 and Shrub: a preset bar, OSC A and OSC B panels with each wavetable's frames
+  stacked in 3D (the one playing bright and filled), arc knobs, filled envelope, LFO and filter curves.
+- Six themes, GLO -> SETUP -> THEME: CRAFT (the CRAFTsynth 2.0's white, black and blue; the default), CRAFT NIGHT,
+  SERUM, ACID, AMBER and PAPER.
+
 ## 0.1 beta (2026-11-22)
 
 First version: the CRAFTsynth 2.0's engine on the FM-1.

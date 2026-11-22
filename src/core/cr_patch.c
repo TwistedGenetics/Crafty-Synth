@@ -163,7 +163,7 @@ void cr_globals_init(cr_globals_t *g)
     g->bend = 2;
     g->velo = 1;
     g->local = 1;
-    g->contrast = 0;
+    g->theme = 0;
 }
 
 int cr_globals_check(cr_globals_t *g)

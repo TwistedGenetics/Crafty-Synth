@@ -283,6 +283,9 @@ int main(int argc, char **argv)
         } else if (!strcmp(a, "shot")) {
             snprintf(path, sizeof path, "%s/%s", out, b);
             shot(path);
+        } else if (!strcmp(a, "theme")) {      /* theme N: the screen's colours */
+            cr_g.theme = (uint8_t)atoi(b);
+            cr_touch();
         } else if (!strcmp(a, "reboot")) {
             cr_app_init();
             cr_page = PG_OSC;

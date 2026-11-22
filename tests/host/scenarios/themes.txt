@@ -1,0 +1,50 @@
+# Crafty Synth: every theme on the main pages (pictures for choosing; the layout must hold in all of them)
+wait 300
+turn PRESET 16
+wait 1600
+theme 0
+shot th0_osc.ppm
+theme 1
+shot th1_osc.ppm
+theme 2
+shot th2_osc.ppm
+theme 3
+shot th3_osc.ppm
+theme 4
+shot th4_osc.ppm
+theme 5
+shot th5_osc.ppm
+tap EDIT
+turn K2 20
+wait 1600
+theme 0
+shot th0_filter.ppm
+theme 1
+shot th1_filter.ppm
+theme 2
+shot th2_filter.ppm
+theme 3
+shot th3_filter.ppm
+theme 4
+shot th4_filter.ppm
+theme 5
+shot th5_filter.ppm
+turn K1 -5
+theme 0
+shot th0_turn.ppm
+theme 2
+shot th2_turn.ppm
+wait 1600
+tap ENV
+tap ENV
+wait 1600
+theme 0
+shot th0_env.ppm
+theme 2
+shot th2_env.ppm
+tap LFO
+wait 1600
+theme 0
+shot th0_lfo.ppm
+theme 2
+shot th2_lfo.ppm

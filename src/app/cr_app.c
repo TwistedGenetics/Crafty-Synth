@@ -58,7 +58,7 @@ static const char *const CR_PG_NAME[PG_N] = {"OSC", "WAVES", "TUNE", "FILTER", "
     "LFO 1", "LFO 2", "MATRIX", "FX", "OUTPUT", "ARP", "SEQ", "MIDI", "KEYS", "SETUP", "SAVE"};
 /* the page's four knobs: a patch parameter, or one of the G_ values (globals and page controls) */
 enum { G_NONE = 100, G_MSRC, G_MDST, G_MDEP, G_STEPS, G_MCH, G_MIN, G_CLOCK, G_BEND, G_KEYS, G_SCALE, G_ROOT,
-       G_VELO, G_LOCAL, G_BREATH, G_ARPOUT, G_SLOT, G_CPOS, G_CHAR };
+       G_VELO, G_LOCAL, G_BREATH, G_ARPOUT, G_SLOT, G_CPOS, G_CHAR, G_THEME };
 static const uint8_t CR_PAGE_P[PG_N][4] = {
     {CR_W1POS, CR_W2POS, CR_MIX, CR_OMAMT},   {CR_W1BANK, CR_W2BANK, CR_OMMODE, CR_SPREAD},
     {CR_TUNE, CR_FINE, CR_OCT, CR_GLIDE},     {CR_CUT, CR_RES, CR_MORPH, CR_FEGAMT},
@@ -68,7 +68,7 @@ static const uint8_t CR_PAGE_P[PG_N][4] = {
     {CR_DIST, CR_DMIX, CR_DTIME, CR_DFB},     {CR_DSYNC, CR_VOL, CR_AEGAMT, CR_GLIDE},
     {CR_ARP, CR_TEMPO, CR_ARPRATE, G_STEPS},  {G_STEPS, CR_TEMPO, CR_ARPRATE, CR_ARP},
     {G_MCH, G_MIN, G_CLOCK, G_BEND},          {G_KEYS, G_SCALE, G_ROOT, G_VELO},
-    {G_LOCAL, G_BREATH, G_ARPOUT, G_NONE},    {G_SLOT, G_NONE, G_CPOS, G_CHAR},
+    {G_LOCAL, G_BREATH, G_ARPOUT, G_THEME},    {G_SLOT, G_NONE, G_CPOS, G_CHAR},
 };
 static uint32_t cr_page = PG_OSC;
 static uint32_t cr_ver = 1, cr_drawn;            /* the screen redraws when cr_ver moves on */
@@ -85,6 +85,31 @@ static uint8_t cr_sus;                           /* MIDI sustain pedal */
 static uint32_t cr_sus_bits[4];
 static uint8_t cr_key_note[27];                  /* the note each key started (so OCT moves don't hang notes) */
 
+typedef struct {
+    const char *name;
+    uint16_t bg, panel, bar, ink, soft, acc, acc2, track, hil, line;
+} cr_theme_t;
+#define CR_NTHEME 6u
+static const cr_theme_t CR_THEMES[CR_NTHEME] = {
+    /* CRAFT: the CRAFTsynth 2.0's own: white plastic, black print, its blue (SHIFT) and grey (PRESET) */
+    {"CRAFT", RGB(226, 226, 222), RGB(247, 247, 245), RGB(206, 206, 201), RGB(14, 15, 17), RGB(92, 98, 106),
+     RGB(22, 101, 216), RGB(40, 44, 50), RGB(200, 200, 195), RGB(206, 224, 250), RGB(182, 182, 177)},
+    /* CRAFT NIGHT: the same colours on a dark body */
+    {"CRAFT NIGHT", RGB(16, 18, 21), RGB(30, 33, 38), RGB(44, 48, 55), RGB(244, 244, 242), RGB(160, 166, 174),
+     RGB(64, 140, 255), RGB(214, 217, 222), RGB(60, 65, 73), RGB(22, 52, 96), RGB(56, 61, 68)},
+    /* SERUM: slate panels, its cyan-blue tables */
+    {"SERUM", RGB(20, 23, 27), RGB(34, 39, 45), RGB(46, 52, 60), RGB(232, 236, 239), RGB(140, 150, 161),
+     RGB(63, 169, 245), RGB(126, 222, 200), RGB(58, 64, 72), RGB(24, 58, 86), RGB(52, 58, 66)},
+    /* ACID: light, an acid green and a hot magenta (jungle flyers) */
+    {"ACID", RGB(238, 240, 230), RGB(250, 251, 245), RGB(214, 218, 200), RGB(12, 14, 10), RGB(80, 86, 72),
+     RGB(40, 128, 0), RGB(200, 0, 110), RGB(202, 206, 190), RGB(220, 245, 170), RGB(188, 192, 176)},
+    /* AMBER: a retro CRT, amber on near black */
+    {"AMBER", RGB(14, 10, 6), RGB(28, 20, 12), RGB(46, 32, 16), RGB(255, 196, 110), RGB(190, 130, 60),
+     RGB(255, 160, 40), RGB(255, 226, 170), RGB(64, 44, 22), RGB(80, 48, 10), RGB(60, 42, 22)},
+    /* PAPER: the plainest and highest contrast: white, black, one strong blue */
+    {"PAPER", RGB(255, 255, 255), RGB(255, 255, 255), RGB(230, 230, 230), RGB(0, 0, 0), RGB(50, 50, 50),
+     RGB(0, 70, 220), RGB(0, 0, 0), RGB(190, 190, 190), RGB(255, 220, 60), RGB(140, 140, 140)},
+};
 static void cr_touch(void) { cr_ver++; }
 static void cr_flash(const char *m)
 {
@@ -359,6 +384,7 @@ static const char *cr_plabel(uint32_t p)
     case G_SLOT: return "SLOT";
     case G_CPOS: return "LETTER";
     case G_CHAR: return "CHAR";
+    case G_THEME: return "THEME";
     default: return p < CR_NP ? CR_P[p].name : "";
     }
 }
@@ -398,6 +424,7 @@ static void cr_ptext(uint32_t p, char *b, int lng)
         case G_ARPOUT: cr_cpy(b, cr_g.arp_out ? "ARP" : "KEYS"); break;
         case G_SLOT: b[0] = (char)('1' + cr_save_slot / 8u); b[1] = '-'; b[2] = (char)('1' + cr_save_slot % 8u); b[3] = 0; break;
         case G_CPOS: cr_num(b, (int32_t)cr_cpos + 1, 0); break;
+        case G_THEME: cr_cpy(b, CR_THEMES[cr_g.theme % CR_NTHEME].name); if (!lng) b[5] = 0; break;
         case G_CHAR: b[0] = cr_p.name[cr_cpos] ? cr_p.name[cr_cpos] : '_'; b[1] = 0; if (b[0] == ' ') cr_cpy(b, "SPC"); break;
         default: break;
         }
@@ -626,6 +653,7 @@ static void cr_gturn(uint32_t p, int32_t d)
     case G_LOCAL: cr_g.local = d > 0; break;
     case G_BREATH: cr_g.breath = (uint8_t)lim32(cr_g.breath + d, 0, 3); break;
     case G_ARPOUT: cr_g.arp_out = d > 0; break;
+    case G_THEME: cr_g.theme = (uint8_t)lim32(cr_g.theme + d, 0, CR_NTHEME - 1); break;
     case G_SLOT: cr_save_slot = (uint32_t)lim32((int32_t)cr_save_slot + d, 0, CR_NPRESET - 1); break;
     case G_CPOS: cr_cpos = (uint32_t)lim32((int32_t)cr_cpos + d, 0, 10); break;
     case G_CHAR: {
@@ -947,19 +975,35 @@ void cr_app_input(void)
 }
 
 /* ------------------------------------------------------------------------------------------------ screen --- */
-/* light, high contrast, big type (the values 23 px, the one turned 44 px) */
-#define C_BG RGB(246, 244, 239)
-#define C_BAND RGB(226, 222, 212)
-#define C_INK RGB(12, 14, 16)
-#define C_SOFT RGB(70, 76, 84)
-#define C_ACC RGB(0, 90, 170)
-#define C_RULE RGB(190, 186, 176)
-#define C_HIL RGB(255, 205, 70)
-#define C_GRID RGB(214, 210, 200)
+/* The look: after Serum 2 and Shrub (a top bar, two oscillator panels with their wavetables stacked in 3D, arc
+ * knobs), in one of the themes below (GLO -> SETUP -> THEME). Type stays big: values 23 px, the one turned 44 px. */
+static const cr_theme_t *cr_th(void) { return &CR_THEMES[cr_g.theme % CR_NTHEME]; }
+static int32_t cr_ty;                            /* the band being drawn starts at this screen row */
 
-static void cr_center(int32_t x, int32_t w, int32_t y, const felucca_font_t *f, const char *s, uint16_t c)
+static uint16_t cr_mix(uint16_t a, uint16_t b, uint32_t t)   /* t 0..256: a .. b */
 {
-    cv_text(x + (w - text_w(f, s)) / 2, y, f, s, c);
+    uint32_t r = ((a >> 11) * (256u - t) + (b >> 11) * t) >> 8, g = (((a >> 5) & 63u) * (256u - t) + ((b >> 5) & 63u) * t) >> 8;
+    uint32_t bl = ((a & 31u) * (256u - t) + (b & 31u) * t) >> 8;
+    return (uint16_t)(r << 11 | g << 5 | bl);
+}
+/* drawing at screen rows (the band clips) */
+static void sx_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c) { cv_rect(x, y - cr_ty, w, h, c); }
+static void sx_line(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint16_t c) { cv_line(x0, y0 - cr_ty, x1, y1 - cr_ty, c); }
+static void sx_text(int32_t x, int32_t y, const felucca_font_t *f, const char *s, uint16_t c) { (void)cv_text(x, y - cr_ty, f, s, c); }
+static void sx_center(int32_t x, int32_t w, int32_t y, const felucca_font_t *f, const char *s, uint16_t c)
+{
+    sx_text(x + (w - text_w(f, s)) / 2, y, f, s, c);
+}
+static void sx_thick(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint16_t c)
+{
+    sx_line(x0, y0, x1, y1, c);
+    sx_line(x0, y0 + 1, x1, y1 + 1, c);
+}
+static void sx_round(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)   /* a panel with cut corners */
+{
+    sx_rect(x + 2, y, w - 4, h, c);
+    sx_rect(x, y + 2, w, h - 4, c);
+    sx_rect(x + 1, y + 1, w - 2, h - 2, c);
 }
 static const felucca_font_t *cr_fit(const char *s, int32_t w)
 {
@@ -969,66 +1013,121 @@ static const felucca_font_t *cr_fit(const char *s, int32_t w)
         return &FONT_B;
     return &FONT_S;
 }
-static void cr_thick(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint16_t c)
-{
-    cv_line(x0, y0, x1, y1, c);
-    cv_line(x0, y0 + 1, x1, y1 + 1, c);
-    cv_line(x0 + 1, y0, x1 + 1, y1, c);
-}
 
-/* a wave of a bank at a morph position, drawn into the box */
-static void cr_draw_wave(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t bank, uint32_t pos, uint16_t c)
+/* a wave of a bank at a morph position 0..1: sample k (0..255), -1..1 */
+static float cr_wave_at(const int16_t (*b)[CR_WT_N], float pos, uint32_t k, uint32_t bank)
 {
-    const int16_t (*b)[CR_WT_N] = cr_bank_base(bank);
-    float m = (float)pos * (4.f / 127.f), f, sc = (float)h * 0.45f / 26000.f;
-    uint32_t wa = (uint32_t)m, i;
-    int32_t py = 0;
+    float m = pos * 4.f, f, v;
+    uint32_t wa = (uint32_t)m;
     if (wa > 3u)
         wa = 3u;
     f = m - (float)wa;
-    for (i = 0; i <= (uint32_t)w; i++) {
-        uint32_t k = i * 255u / (uint32_t)w;
-        float v = (float)b[wa][k] + ((float)b[wa + 1u][k] - (float)b[wa][k]) * f;
-        int32_t yy = y + h / 2 - (int32_t)(v * sc);
-        if (bank == CR_BANK_NOISE && pos > 0u)  /* the noise bank: a sine going to noise */
-            yy += (int32_t)((float)((k * 2654435761u) >> 26) - 32.f) * (float)pos * (float)h / 9000.f;
+    v = ((float)b[wa][k] + ((float)b[wa + 1u][k] - (float)b[wa][k]) * f) * (1.f / 26000.f);
+    if (bank == CR_BANK_NOISE && pos > 0.f) {                /* the noise bank: a sine going to noise */
+        float n = (float)(((k * 2654435761u) >> 23) & 255u) * (1.f / 128.f) - 1.f, nm = pos * 2.f > 1.f ? 1.f : pos * 2.f;
+        v += (n - v) * nm;
+    }
+    return v;
+}
+
+/* a wavetable as Serum draws it: its frames stacked in depth, the one playing bright and filled */
+#define CR_FRAMES 11
+static void cr_wt3d(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t bank, uint32_t pos127, uint16_t acc)
+{
+    const cr_theme_t *t = cr_th();
+    const int16_t (*b)[CR_WT_N] = cr_bank_base(bank);
+    const int32_t dx = 3, dy = 4, fw = w - dx * (CR_FRAMES - 1), amp = (h - dy * (CR_FRAMES - 1)) * 9 / 20;
+    float pos = (float)pos127 / 127.f;
+    int32_t f, i, sel_ox, sel_oy, yb, py = 0;
+    for (f = CR_FRAMES - 1; f >= 0; f--) {                   /* back to front, faint */
+        int32_t ox = x + f * dx, oy = y + h - amp - 2 - f * dy;
+        uint16_t c = cr_mix(t->panel, acc, 60u + (uint32_t)(CR_FRAMES - f) * 9u);   /* Serum's tinted stack, fading back */
+        for (i = 0; i <= fw; i += 2) {
+            int32_t yy = oy - (int32_t)(cr_wave_at(b, (float)f / (float)(CR_FRAMES - 1), (uint32_t)(i * 255 / fw), bank) * (float)amp);
+            if (i)
+                sx_line(ox + i - 2, py, ox + i, yy, c);
+            py = yy;
+        }
+    }
+    sel_ox = x + (int32_t)(pos * (float)(dx * (CR_FRAMES - 1)) + 0.5f);   /* the frame playing, where it sits */
+    sel_oy = y + h - amp - 2 - (int32_t)(pos * (float)(dy * (CR_FRAMES - 1)) + 0.5f);
+    yb = sel_oy;
+    for (i = 0; i <= fw; i++) {
+        int32_t yy = sel_oy - (int32_t)(cr_wave_at(b, pos, (uint32_t)(i * 255 / fw), bank) * (float)amp);
+        sx_line(sel_ox + i, yb, sel_ox + i, yy, cr_mix(t->panel, acc, 90u));   /* filled to its middle */
         if (i)
-            cr_thick(x + (int32_t)i - 1, py, x + (int32_t)i, yy, c);
+            sx_thick(sel_ox + i - 1, py, sel_ox + i, yy, acc);
         py = yy;
+    }
+    sx_line(sel_ox, yb, sel_ox + fw, yb, cr_mix(t->panel, acc, 140u));
+}
+
+/* an arc knob (Serum's): a 270-degree track, the value's arc over it, bipolar ones from the top */
+static void cr_knob(int32_t cx, int32_t cy, int32_t r, float v, int bip, uint16_t acc)
+{
+    const cr_theme_t *t = cr_th();
+    int32_t i;
+    float from = bip ? 0.5f : 0.f;
+    for (i = 0; i <= 96; i++) {
+        float u = (float)i / 96.f, ang = 0.375f + u * 0.75f;  /* turns, from bottom-left round the top to bottom-right */
+        float sn = cr_sin_turn(ang - (float)(int32_t)ang), cs = cr_sin_turn(cr_frac(ang + 0.25f));
+        int on = (u >= (from < v ? from : v) && u <= (from < v ? v : from));
+        int32_t k;
+        for (k = -1; k <= 2; k++) {
+            int32_t px = cx + (int32_t)(cs * (float)(r + k)), py = cy + (int32_t)(sn * (float)(r + k));
+            sx_rect(px, py, 1, 1, on ? acc : t->track);
+        }
+    }
+    {
+        float ang = 0.375f + v * 0.75f, sn = cr_sin_turn(cr_frac(ang)), cs = cr_sin_turn(cr_frac(ang + 0.25f));
+        sx_thick(cx, cy, cx + (int32_t)(cs * (float)(r - 4)), cy + (int32_t)(sn * (float)(r - 4)), t->ink);
     }
 }
 
 static void cr_draw_env(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t a)
 {
-    float t[4], tot, sx;
+    const cr_theme_t *t = cr_th();
+    float tt[4], tot, sxs;
     uint32_t i;
-    int32_t x0 = x, x1, x2, x3, x4, ys;
+    int32_t px[5], py[5], k;
     for (i = 0; i < 4u; i++) {
         float v = (float)cr_p.p[a + i] / 127.f;
-        t[i] = i == 2u ? 0.6f : 0.05f + 4.f * v * v * v;
+        tt[i] = i == 2u ? 0.6f : 0.05f + 4.f * v * v * v;
     }
-    tot = t[0] + t[1] + t[2] + t[3];
-    sx = (float)w / tot;
-    x1 = x0 + (int32_t)(t[0] * sx);
-    x2 = x1 + (int32_t)(t[1] * sx);
-    x3 = x2 + (int32_t)(t[2] * sx);
-    x4 = x + w;
-    ys = y + h - (int32_t)((float)cr_p.p[a + 2u] / 127.f * (float)h);
-    cr_thick(x0, y + h, x1, y, C_INK);
-    cr_thick(x1, y, x2, ys, C_INK);
-    cr_thick(x2, ys, x3, ys, C_INK);
-    cr_thick(x3, ys, x4, y + h, C_INK);
+    tot = tt[0] + tt[1] + tt[2] + tt[3];
+    sxs = (float)w / tot;
+    px[0] = x;
+    px[1] = px[0] + (int32_t)(tt[0] * sxs);
+    px[2] = px[1] + (int32_t)(tt[1] * sxs);
+    px[3] = px[2] + (int32_t)(tt[2] * sxs);
+    px[4] = x + w;
+    py[0] = py[4] = y + h;
+    py[1] = y;
+    py[2] = py[3] = y + h - (int32_t)((float)cr_p.p[a + 2u] / 127.f * (float)h);
+    for (k = 0; k < 4; k++) {                    /* filled under, as Serum's envelopes */
+        int32_t xx;
+        for (xx = px[k]; xx <= px[k + 1]; xx++) {
+            int32_t yy = px[k + 1] == px[k] ? py[k] : py[k] + (py[k + 1] - py[k]) * (xx - px[k]) / (px[k + 1] - px[k]);
+            sx_line(xx, yy, xx, y + h, cr_mix(t->panel, t->acc, 70u));
+        }
+    }
+    for (k = 0; k < 4; k++)
+        sx_thick(px[k], py[k], px[k + 1], py[k + 1], t->acc);
+    for (k = 1; k < 4; k++)
+        sx_rect(px[k] - 2, py[k] - 2, 5, 5, t->ink);
 }
 
 static void cr_draw_lfo(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t sh)
 {
+    const cr_theme_t *t = cr_th();
     float s = (float)cr_p.p[sh] / 127.f * 4.f, f;
     uint32_t k = (uint32_t)s, i, r = 0x1234u;
-    int32_t py = 0;
+    int32_t py = 0, mid = y + h / 2;
     float hold = 0.f;
     if (k > 3u)
         k = 3u;
     f = s - (float)k;
+    sx_line(x, mid, x + w, mid, t->line);
     for (i = 0; i <= (uint32_t)w; i++) {
         float ph = (float)i / (float)w * 2.f, v[5], val;
         int32_t yy;
@@ -1043,158 +1142,207 @@ static void cr_draw_lfo(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t sh)
         v[3] = ph < 0.5f ? 1.f : -1.f;
         v[4] = hold;
         val = v[k] + (v[k + 1u] - v[k]) * f;
-        yy = y + h / 2 - (int32_t)(val * (float)h * 0.45f);
+        yy = mid - (int32_t)(val * (float)h * 0.45f);
+        sx_line(x + (int32_t)i, mid, x + (int32_t)i, yy, cr_mix(t->panel, t->acc, 70u));
         if (i)
-            cr_thick(x + (int32_t)i - 1, py, x + (int32_t)i, yy, C_INK);
+            sx_thick(x + (int32_t)i - 1, py, x + (int32_t)i, yy, t->acc);
         py = yy;
     }
 }
 
 static void cr_draw_filter(int32_t x, int32_t y, int32_t w, int32_t h)
 {
+    const cr_theme_t *t = cr_th();
     float fc = (float)cr_p.p[CR_CUT] / 127.f * 10.f, k = 2.f * (1.f - 0.985f * (float)cr_p.p[CR_RES] / 127.f);
     float m = (float)cr_p.p[CR_MORPH] / 127.f, wl = m < 0.5f ? 1.f - 2.f * m : 0.f, wh = m < 0.5f ? 0.f : 2.f * m - 1.f;
     float wb = m < 0.5f ? 2.f * m : 2.f - 2.f * m;
     uint32_t i;
-    int32_t py = 0;
+    int32_t py = 0, g;
+    for (g = 1; g < 10; g++)                     /* octave lines */
+        sx_line(x + g * w / 10, y, x + g * w / 10, y + h, t->line);
     for (i = 0; i <= (uint32_t)w; i++) {
         float oc = (float)i / (float)w * 10.f, r = cr_exp2f(oc - fc), r2 = r * r;
-        float re = 1.f - r2, im = k * r, den = re * re + im * im, hr, hi, mag, db;
-        /* H = (wl + wb j r + wh (-r^2)) / (1 - r^2 + j k r) */
-        float nr = wl - wh * r2, ni = wb * r;
+        float re = 1.f - r2, im = k * r, den = re * re + im * im, nr = wl - wh * r2, ni = wb * r, hr, hi, db;
+        int32_t yy;
         hr = (nr * re + ni * im) / den;
         hi = (ni * re - nr * im) / den;
-        mag = hr * hr + hi * hi;
-        db = 10.f * cr_log2f(mag + 1e-9f) * 0.30103f;
+        db = 10.f * cr_log2f(hr * hr + hi * hi + 1e-9f) * 0.30103f;
         db = db < -36.f ? -36.f : db > 18.f ? 18.f : db;
-        {
-            int32_t yy = y + (int32_t)((18.f - db) / 54.f * (float)h);
-            if (i)
-                cr_thick(x + (int32_t)i - 1, py, x + (int32_t)i, yy, C_INK);
-            py = yy;
-        }
+        yy = y + (int32_t)((18.f - db) / 54.f * (float)h);
+        sx_line(x + (int32_t)i, yy, x + (int32_t)i, y + h, cr_mix(t->panel, t->acc, 70u));
+        if (i)
+            sx_thick(x + (int32_t)i - 1, py, x + (int32_t)i, yy, t->acc);
+        py = yy;
     }
-    cv_line(x, y + h * 18 / 54, x + w, y + h * 18 / 54, C_RULE);
 }
 
-void cr_app_draw(int force)
+/* where a parameter's value sits on its knob (0..1), and whether it is bipolar */
+static float cr_knob_pos(uint32_t p, int *bip)
 {
-    char b[40], t[16];
+    *bip = 0;
+    if (p >= G_NONE) {
+        if (p == G_MDEP) {
+            *bip = 1;
+            return (float)cr_p.p[CR_DEP0 + cr_msrc] / 127.f;
+        }
+        if (p == G_MDST)
+            return (float)cr_p.p[CR_DST0 + cr_msrc] / (float)(CR_ND - 1u);
+        if (p == G_MSRC)
+            return (float)cr_msrc / 7.f;
+        if (p == G_STEPS)
+            return (float)cr_p.steps / 16.f;
+        if (p == G_THEME)
+            return (float)(cr_g.theme % CR_NTHEME) / (float)(CR_NTHEME - 1u);
+        return -1.f;                             /* no knob: the value alone */
+    }
+    if (CR_P[p].kind == CR_K_DEST)
+        return (float)cr_p.p[p] / (float)(CR_ND - 1u);
+    *bip = CR_P[p].kind == CR_K_BIP || CR_P[p].kind == CR_K_SEMI || CR_P[p].kind == CR_K_CENT || CR_P[p].kind == CR_K_GLIDE;
+    return (float)cr_p.p[p] / 127.f;
+}
+
+static void cr_screen(void)
+{
+    const cr_theme_t *t = cr_th();
+    char b[40], s2[16];
     uint32_t i;
-    if (!force && cr_drawn == cr_ver)
-        return;
-    cr_drawn = cr_ver;
-    /* ---- top: the preset, its name, the page; the modifier and what is on ---- */
-    cv_begin(240, 120, C_BG);
-    cv_rect(0, 0, 240, 34, C_BAND);
+    /* ---- the top bar: the preset in a box, the page ---- */
+    sx_rect(0, 0, 240, 32, t->bar);
+    sx_round(3, 3, 150, 26, t->panel);
     b[0] = (char)('1' + cr_g.cur / 8u);
     b[1] = '-';
     b[2] = (char)('1' + cr_g.cur % 8u);
     b[3] = 0;
-    cv_text(5, 5, &FONT_M, b, C_ACC);
+    sx_text(8, 5, &FONT_M, b, t->acc);
     for (i = 0; i < 11u && cr_p.name[i]; i++)
-        b[i] = cr_p.name[i];
-    b[i] = 0;
+        s2[i] = cr_p.name[i];
+    s2[i] = 0;
     if (cr_dirty)
-        cr_cat(b, "*");
-    cv_text(44, 5, cr_fit(b, 120), b, C_INK);
-    cv_text(236 - text_w(&FONT_B, CR_PG_NAME[cr_page]), 10, &FONT_B, CR_PG_NAME[cr_page], C_ACC);
-    cv_rect(0, 34, 240, 2, C_INK);
-    cr_cpy(b, CR_OM_NAME[cr_om_of(cr_p.p[CR_OMMODE])]);
-    cv_text(5, 40, &FONT_B, b, C_INK);
-    t[0] = 0;
-    if (cr_p.p[CR_ARP] >= 64u)
-        cr_cat(t, cr_p.steps ? "SEQ " : "ARP ");
-    if (cr_latch)
-        cr_cat(t, "LATCH ");
-    if (cr_oct) {
-        cr_cat(t, "O");
-        cr_num(t + cr_len(t), cr_oct, 1);
-    }
-    cv_text(236 - text_w(&FONT_B, t), 40, &FONT_B, t, C_ACC);
-    /* ---- middle (60..158): what was just turned, big; else the page's picture ---- */
+        cr_cat(s2, "*");
+    sx_text(44, 5, cr_fit(s2, 106), s2, t->ink);
+    sx_center(156, 84, 9, text_w(&FONT_B, CR_PG_NAME[cr_page]) <= 82 ? &FONT_B : &FONT_S, CR_PG_NAME[cr_page], t->ink);
+    /* ---- the middle (34..148) ---- */
     if (cr_msg[0]) {
-        cv_rect(0, 64, 240, 56, C_HIL);
-        cr_center(0, 240, 70, cr_fit(cr_msg, 236), cr_msg, C_INK);
+        sx_round(4, 36, 232, 110, t->hil);
+        sx_center(4, 232, 76, cr_fit(cr_msg, 228), cr_msg, t->ink);
     } else if (cr_hit >= 0) {
-        cr_center(0, 240, 62, &FONT_M, cr_plabel(cr_hit_p), C_SOFT);
+        sx_round(4, 36, 232, 110, t->panel);
+        sx_center(4, 232, 46, &FONT_M, cr_plabel(cr_hit_p), t->soft);
         cr_ptext(cr_hit_p, b, 1);
-        cr_center(0, 240, 86, text_w(&FONT_XL, b) <= 236 ? &FONT_XL : &FONT_M, b, C_INK);
-    } else if (cr_page <= PG_TUNE) {
-        cv_text(6, 62, &FONT_S, "WAVE 1", C_SOFT);
-        cv_text(126, 62, &FONT_S, "WAVE 2", C_ACC);
-        cr_draw_wave(6, 76, 108, 44, cr_bank_of(cr_p.p[CR_W1BANK], 0), cr_p.p[CR_W1POS], C_INK);
-        cr_draw_wave(126, 76, 108, 44, cr_bank_of(cr_p.p[CR_W2BANK], 1), cr_p.p[CR_W2POS], C_ACC);
-    } else if (cr_page >= PG_FEG && cr_page <= PG_MEG) {
-        cr_draw_env(10, 64, 220, 54, CR_PAGE_P[cr_page][0]);
-    } else if (cr_page == PG_LFO1 || cr_page == PG_LFO2) {
-        cr_draw_lfo(10, 62, 150, 56, cr_page == PG_LFO1 ? CR_L1SHAPE : CR_L2SHAPE);
-        {
-            uint32_t s = cr_page == PG_LFO1 ? 0u : 1u, dst = cr_p.p[CR_DST0 + s];
-            cv_text(168, 64, &FONT_S, "TO", C_SOFT);
-            cv_text(168, 80, cr_fit(CR_DEST_NAME[dst], 70), CR_DEST_NAME[dst], C_INK);
-            if (dst) {
-                cr_num(b, (int32_t)cr_p.p[CR_DEP0 + s] - 64, 1);
-                cv_text(168, 100, &FONT_B, b, C_ACC);
+        sx_center(4, 232, 80, text_w(&FONT_XL, b) <= 228 ? &FONT_XL : &FONT_M, b, t->ink);
+    } else if (cr_page <= PG_TUNE) {             /* OSC A and OSC B, Serum's way */
+        uint32_t k;
+        for (k = 0; k < 2u; k++) {
+            int32_t x = 4 + (int32_t)k * 118;
+            uint32_t bank = cr_bank_of(cr_p.p[k ? CR_W2BANK : CR_W1BANK], (int)k);
+            uint16_t acc = k ? t->acc2 : t->acc;
+            sx_round(x, 36, 114, 110, t->panel);
+            sx_rect(x + 4, 40, 18, 18, acc);
+            sx_center(x + 4, 18, 41, &FONT_B, k ? "B" : "A", t->panel);
+            cr_ptext(k ? CR_W2BANK : CR_W1BANK, b, 1);
+            b[10] = 0;
+            sx_text(x + 26, 41, &FONT_B, b, t->ink);
+            cr_wt3d(x + 5, 62, 104, 66, bank, cr_p.p[k ? CR_W2POS : CR_W1POS], acc);
+            cr_cpy(b, "POS ");
+            cr_num(b + 4, cr_p.p[k ? CR_W2POS : CR_W1POS], 0);
+            sx_text(x + 6, 129, &FONT_S, b, t->soft);
+            if (!k) {
+                cr_cpy(b, CR_OM_SHORT[cr_om_of(cr_p.p[CR_OMMODE])]);
+                sx_text(x + 108 - text_w(&FONT_S, b), 129, &FONT_S, b, acc);
             }
         }
-    } else if (cr_page == PG_FILTER) {
-        cr_draw_filter(10, 62, 220, 56);
-    } else if (cr_page == PG_MATRIX) {
-        cr_center(0, 240, 62, &FONT_M, CR_SRC_NAME[cr_msrc], C_ACC);
-        cr_cpy(b, "TO ");
-        cr_cat(b, CR_DEST_NAME[cr_p.p[CR_DST0 + cr_msrc] % CR_ND]);
-        cr_center(0, 240, 90, &FONT_M, b, C_INK);
-    } else if (cr_page == PG_SEQ || (cr_page == PG_ARP && cr_p.steps)) {
-        for (i = 0; i < CR_NSTEP; i++) {
-            int32_t x = 4 + (int32_t)(i % 8u) * 29, y = 62 + (int32_t)(i / 8u) * 28;
-            if (i < cr_p.steps) {
-                uint32_t s = cr_p.step[i];
-                cv_rect(x, y, 27, 26, s == CR_REST ? C_GRID : C_INK);
-                if (s != CR_REST) {
-                    cr_num(t, (int32_t)s - 64, 0);
-                    cr_center(x, 27, y + 5, &FONT_B, t, C_BG);
-                }
-            } else
-                cv_rect(x, y, 27, 26, C_GRID);
-        }
-    } else if (cr_page == PG_SAVE) {
-        cr_center(0, 240, 60, &FONT_S, cr_preset_saved(cr_save_slot) ? "OVERWRITES YOUR PRESET" : "OVER THE FACTORY PRESET", C_SOFT);
-        for (i = 0; i < 11u; i++) {
-            int32_t x = 10 + (int32_t)i * 20;
-            char c[2] = {cr_p.name[i] ? cr_p.name[i] : ' ', 0};
-            if (i == cr_cpos)
-                cv_rect(x, 80, 19, 30, C_HIL);
-            cv_rect(x, 110, 19, 2, C_INK);
-            cr_center(x, 19, 82, &FONT_M, c, C_INK);
-        }
     } else {
-        cr_ptext(CR_PAGE_P[cr_page][0], b, 1);
-        cr_center(0, 240, 62, &FONT_M, cr_plabel(CR_PAGE_P[cr_page][0]), C_SOFT);
-        cr_center(0, 240, 86, text_w(&FONT_XL, b) <= 236 ? &FONT_XL : &FONT_M, b, C_INK);
+        sx_round(4, 36, 232, 110, t->panel);
+        if (cr_page >= PG_FEG && cr_page <= PG_MEG)
+            cr_draw_env(14, 48, 212, 86, CR_PAGE_P[cr_page][0]);
+        else if (cr_page == PG_LFO1 || cr_page == PG_LFO2) {
+            uint32_t sl = cr_page == PG_LFO1 ? 0u : 1u, dst = cr_p.p[CR_DST0 + sl];
+            cr_draw_lfo(12, 46, 140, 90, cr_page == PG_LFO1 ? CR_L1SHAPE : CR_L2SHAPE);
+            sx_text(160, 50, &FONT_S, "TO", t->soft);
+            sx_text(160, 68, cr_fit(CR_DEST_NAME[dst], 72), CR_DEST_NAME[dst], t->ink);
+            if (dst) {
+                cr_num(b, (int32_t)cr_p.p[CR_DEP0 + sl] - 64, 1);
+                sx_text(160, 96, &FONT_M, b, t->acc);
+            }
+        } else if (cr_page == PG_FILTER)
+            cr_draw_filter(12, 44, 216, 94);
+        else if (cr_page == PG_MATRIX) {
+            sx_center(4, 232, 48, &FONT_M, CR_SRC_NAME[cr_msrc], t->acc);
+            sx_center(4, 232, 76, &FONT_S, "TO", t->soft);
+            sx_center(4, 232, 96, cr_fit(CR_DEST_NAME[cr_p.p[CR_DST0 + cr_msrc] % CR_ND], 228),
+                      CR_DEST_NAME[cr_p.p[CR_DST0 + cr_msrc] % CR_ND], t->ink);
+        } else if (cr_page == PG_SEQ || (cr_page == PG_ARP && cr_p.steps)) {
+            for (i = 0; i < CR_NSTEP; i++) {
+                int32_t x = 10 + (int32_t)(i % 8u) * 28, y = 46 + (int32_t)(i / 8u) * 46;
+                if (i < cr_p.steps && cr_p.step[i] != CR_REST) {
+                    sx_round(x, y, 26, 40, t->acc);
+                    cr_num(s2, (int32_t)cr_p.step[i] - 64, 0);
+                    sx_center(x, 26, y + 12, &FONT_B, s2, t->panel);
+                } else
+                    sx_round(x, y, 26, 40, i < cr_p.steps ? t->line : t->track);
+            }
+        } else if (cr_page == PG_SAVE) {
+            sx_center(4, 232, 44, &FONT_S, cr_preset_saved(cr_save_slot) ? "OVERWRITES YOUR PRESET" : "OVER THE FACTORY PRESET", t->soft);
+            for (i = 0; i < 11u; i++) {
+                int32_t x = 10 + (int32_t)i * 20;
+                char c[2] = {cr_p.name[i] ? cr_p.name[i] : ' ', 0};
+                if (i == cr_cpos)
+                    sx_rect(x, 70, 19, 32, t->hil);
+                sx_rect(x, 102, 19, 2, t->ink);
+                sx_center(x, 19, 74, &FONT_M, c, t->ink);
+            }
+            sx_center(4, 232, 116, &FONT_S, "SAVE: SAVE    PLAY: INIT", t->soft);
+        } else {
+            cr_ptext(CR_PAGE_P[cr_page][0], b, 1);
+            sx_center(4, 232, 46, &FONT_M, cr_plabel(CR_PAGE_P[cr_page][0]), t->soft);
+            sx_center(4, 232, 80, text_w(&FONT_XL, b) <= 228 ? &FONT_XL : &FONT_M, b, t->ink);
+        }
     }
-    cv_blit(0, 0);
-    /* ---- bottom: the four knobs, big ---- */
-    cv_begin(240, 120, C_BG);
-    if (cr_page == PG_SAVE) {
-        cr_center(0, 240, 2, &FONT_B, "SAVE: SAVE   PLAY: INIT", C_SOFT);
-    }
-    cv_rect(0, 38, 240, 2, C_INK);
+    /* ---- the knobs (150..240) ---- */
+    sx_rect(0, 150, 240, 90, t->bar);
     for (i = 0; i < 4u; i++) {
         uint32_t p = CR_PAGE_P[cr_page][i];
         int32_t x = (int32_t)i * 60;
         const char *l;
-        if (i)
-            cv_rect(x, 40, 1, 80, C_RULE);
+        float v;
+        int bip;
         if (p == G_NONE)
             continue;
-        if ((int32_t)i == cr_hit)
-            cv_rect(x + 1, 40, 59, 80, C_HIL);
+        sx_round(x + 2, 152, 56, 86, (int32_t)i == cr_hit ? t->hil : t->panel);
         l = cr_plabel(p);
-        cr_center(x, 60, 48, text_w(&FONT_S, l) <= 58 ? &FONT_S : &FONT_XS, l, C_SOFT);
+        sx_center(x + 2, 56, 154, text_w(&FONT_S, l) <= 54 ? &FONT_S : &FONT_XS, l, t->soft);
+        v = cr_knob_pos(p, &bip);
+        if (v >= 0.f)
+            cr_knob(x + 30, 188, 14, v, bip, i & 1u ? t->acc2 : t->acc);
         cr_ptext(p, b, 0);
-        cr_center(x, 60, 74, cr_fit(b, 58), b, C_INK);
+        sx_center(x + 2, 56, v >= 0.f ? 208 : 186, cr_fit(b, 54), b, t->ink);
     }
+    /* what is on: ARP / SEQ, LATCH, the octave (a strip under the bar) */
+    b[0] = 0;
+    if (cr_p.p[CR_ARP] >= 64u)
+        cr_cat(b, cr_p.steps ? "SEQ " : "ARP ");
+    if (cr_latch)
+        cr_cat(b, "LATCH ");
+    if (cr_oct) {
+        cr_cat(b, "OCT");
+        cr_num(b + cr_len(b), cr_oct, 1);
+    }
+    if (b[0] && !cr_msg[0] && cr_hit < 0 && cr_page > PG_TUNE)
+        sx_text(232 - text_w(&FONT_S, b), 129, &FONT_S, b, t->acc);
+}
+
+void cr_app_draw(int force)
+{
+    if (!force && cr_drawn == cr_ver)
+        return;
+    cr_drawn = cr_ver;
+    cv_begin(240, 120, cr_th()->bg);
+    cr_ty = 0;
+    cr_screen();
+    cv_blit(0, 0);
+    cv_begin(240, 120, cr_th()->bg);
+    cr_ty = 120;
+    cr_screen();
     cv_blit(0, 120);
 }
 

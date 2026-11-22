@@ -75,7 +75,7 @@ _Static_assert(sizeof(cr_patch_t) == CR_PATCH_BYTES, "a patch's bytes (the store
 #define CR_NSCALE 16u
 typedef struct {
     uint8_t magic, midi_ch, midi_in, scale, root, clock, bend, velo;
-    uint8_t cur, local, breath, kbmode, contrast, arp_out, pad[2];
+    uint8_t cur, local, breath, kbmode, theme, arp_out, pad[2];
 } cr_globals_t;
 #define CR_GLOBALS_MAGIC 0xC6u
 extern const char *const CR_SCALE_NAME[CR_NSCALE];
