@@ -496,15 +496,24 @@ function buildKb() {
     k.onpointerup = k.onpointercancel = () => key(n + 12 * kbOct, 0);
     kb.append(k);
   }
-  const map = "awsedftgyhujk";
+  // the computer keys play wherever the focus is (a dropdown just used included: it would jump to a preset starting
+  // with that letter), except while typing a name
+  const map = "awsedftgyhujk", typing = (t) => t.tagName === "INPUT" && t.type === "text";
   addEventListener("keydown", (e) => {
-    if (e.repeat || e.metaKey || e.ctrlKey || ["INPUT", "SELECT"].includes(e.target.tagName)) return;
-    if (e.key === "z") kbOct = Math.max(-2, kbOct - 1);
-    if (e.key === "x") kbOct = Math.min(3, kbOct + 1);
-    const i = map.indexOf(e.key);
-    if (i >= 0) key(60 + i + 12 * kbOct, 100);
-  });
-  addEventListener("keyup", (e) => { const i = map.indexOf(e.key); if (i >= 0) key(60 + i + 12 * kbOct, 0); });
+    const k = e.key.toLowerCase(), i = map.indexOf(k);
+    if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || (i < 0 && k !== "z" && k !== "x")) return;
+    e.preventDefault();
+    if (e.repeat) return;
+    if (k === "z") kbOct = Math.max(-2, kbOct - 1);
+    else if (k === "x") kbOct = Math.min(3, kbOct + 1);
+    else key(60 + i + 12 * kbOct, 100);
+  }, true);
+  addEventListener("keyup", (e) => {
+    const i = map.indexOf(e.key.toLowerCase());
+    if (i >= 0 && !typing(e.target)) key(60 + i + 12 * kbOct, 0);
+  }, true);
+  addEventListener("blur", () => { for (const n of [...held]) key(n, 0); });   // no stuck notes when the window loses focus
+  addEventListener("change", (e) => { if (e.target.tagName === "SELECT") e.target.blur(); });
 }
 
 /* ------------------------------------------------------------------------------------ user wavetables --- */
