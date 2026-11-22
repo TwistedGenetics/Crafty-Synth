@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Crafty Synth editor: the pages (as the FM-1's), the preview (the firmware's engine in WebAssembly), the FM-1 over
-// Web MIDI, user wavetables from WAV files. Copyright (C) 2026 Jamie (TwistedGenetics).
+// Crafty Synth editor: the panels (after Serum 2 and Shrub, in the FM-1's themes), the preview (the firmware's engine
+// in WebAssembly), the FM-1 over Web MIDI, user wavetables from WAV files. Copyright (C) 2026 Jamie (TwistedGenetics).
 import M from "./meta.js";
 import { fmt, choices, PI, bankOf } from "./format.js";
 import { Device } from "./device.js";
@@ -14,180 +14,335 @@ const el = (tag, attrs = {}, ...kids) => {
   return e;
 };
 
+/* ------------------------------------------------------------------------------------------ the themes --- */
+// the FM-1's (src/app/cr_app.c, CR_THEMES), same order and colours: bg panel bar ink soft acc acc2 track hil line
+const THEMES = [
+  ["CRAFT", "#e2e2de #f7f7f5 #cecec9 #0e0f11 #5c626a #1665d8 #282c32 #c8c8c3 #cee0fa #b6b6b1"],
+  ["CRAFT NIGHT", "#101215 #1e2126 #2c3037 #f4f4f2 #a0a6ae #408cff #d6d9de #3c4149 #163460 #383d44"],
+  ["SERUM", "#14171b #22272d #2e343c #e8ecef #8c96a1 #3fa9f5 #7edec8 #3a4048 #183a56 #343a42"],
+  ["ACID", "#eef0e6 #fafbf5 #d6dac8 #0c0e0a #505648 #288000 #c8006e #cacebe #dcf5aa #bcc0b0"],
+  ["AMBER", "#0e0a06 #1c140c #2e2010 #ffc46e #be823c #ffa028 #ffe2aa #402c16 #50300a #3c2a16"],
+  ["PAPER", "#ffffff #ffffff #e6e6e6 #000000 #323232 #0046dc #000000 #bebebe #ffdc3c #8c8c8c"],
+].map(([name, c]) => {
+  const [bg, panel, bar, ink, soft, acc, acc2, track, hil, line] = c.split(" ");
+  return { name, bg, panel, bar, ink, soft, acc, acc2, track, hil, line };
+});
+let T = THEMES[2];
+function setTheme(i) {
+  T = THEMES[i] || THEMES[2];
+  for (const [k, v] of Object.entries(T)) if (k !== "name") document.documentElement.style.setProperty(`--${k}`, v);
+  try { localStorage.setItem("crafty-theme", String(i)); } catch (e) { /* no storage: fine */ }
+  drawAll();
+}
+const rgba = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
 /* ---------------------------------------------------------------------------------------------- state --- */
-const patch = new Uint8Array(96);     // the working patch: name[12], p[64], steps, magic, ver, root, step[16]
+const patch = new Uint8Array(96);     // name[12], p[64], steps, magic, ver, root, step[16]
 const P = (k) => patch[12 + PI[k]];
-const ubank = [null, null];           // Int16Array(5 * 256) each, or null (bank 1 stands in)
+const ubank = [null, null];
 let cur = 0;
 const dev = new Device();
 let ctx = null, node = null, wasm = null;
 
 function post(m) { if (node) node.port.postMessage(m); }
-function loadBytes(b) {
-  patch.set(b);
-  post({ t: "patch", bytes: patch.slice() });
-  render();
-}
+function loadBytes(b) { patch.set(b); post({ t: "patch", bytes: patch.slice() }); refresh(); }
 function factory(n) { loadBytes(Uint8Array.from(M.presets[n].bytes)); }
 function setParam(id, v, fromDevice = false) {
   v = Math.max(0, Math.min(127, v | 0));
+  if (patch[12 + id] === v) return;
   patch[12 + id] = v;
   post({ t: "param", id, v });
   if (!fromDevice) dev.cc(M.params[id].cc, v);
   refresh();
 }
 
-/* ---------------------------------------------------------------------------------------------- pages --- */
-const PAGES = [
-  ["OSC", ["W1POS", "W2POS", "MIX", "OMAMT"], "waves"],
-  ["WAVES", ["W1BANK", "W2BANK", "OMMODE", "SPREAD"]],
-  ["TUNE", ["TUNE", "FINE", "OCT", "GLIDE"]],
-  ["FILTER", ["CUT", "RES", "MORPH", "FEGAMT"]],
-  ["FILTER EG", ["FA", "FD", "FS", "FR"]],
-  ["AMP EG", ["AA", "AD", "AS", "AR", "AEGAMT"]],
-  ["MOD EG", ["MA", "MD", "MS", "MR"]],
-  ["LFO 1", ["L1RATE", "L1SHAPE", "L1MODE", "L1SYNC"]],
-  ["LFO 2", ["L2RATE", "L2SHAPE", "L2MODE", "L2SYNC"]],
-  ["MATRIX", [], "matrix"],
-  ["FX", ["DIST", "DMIX", "DTIME", "DFB", "DSYNC", "VOL"]],
-  ["ARP", ["ARP", "TEMPO", "ARPRATE"]],
-];
-const ctls = [];
-
-function control(key) {
-  const p = M.params[PI[key]];
-  const box = el("div", { class: "ctl" });
-  const val = el("span", { class: "val" });
-  box.append(el("label", { textContent: p.name }), val);
-  const ch = choices(p);
-  let input;
-  if (ch) {
-    input = el("select");
-    for (const [v, n] of ch) input.append(el("option", { value: v, textContent: n }));
-    input.onchange = () => setParam(p.id, +input.value);
-    box.append(input);
-    val.hidden = true;
-  } else {
-    input = el("input", { type: "range", min: 0, max: 127, step: 1 });
-    input.oninput = () => setParam(p.id, +input.value);
-    box.append(input);
+/* ------------------------------------------------------------------------------------------- canvases --- */
+function fitCanvas(c) {
+  const r = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * r) || c.height !== Math.round(h * r)) { c.width = Math.round(w * r); c.height = Math.round(h * r); }
+  const g = c.getContext("2d");
+  g.setTransform(r, 0, 0, r, 0, 0);
+  g.clearRect(0, 0, w, h);
+  return { g, w, h };
+}
+function waveData(bank) {
+  if (bank >= 9) { const u = ubank[bank - 9]; if (u) return u; bank = 0; }
+  if (!wasm) return null;
+  return new Int16Array(wasm.memory.buffer, wasm.cw_wave(bank), 5 * N);
+}
+function waveAt(d, bank, pos, k) {
+  const m = pos * 4, a = Math.min(3, Math.floor(m)), f = m - a;
+  let v = (d[a * N + k] + (d[(a + 1) * N + k] - d[a * N + k]) * f) / PEAK;
+  if (bank === 8 && pos > 0) {                     // the sine / noise bank
+    const n = (((k * 2654435761) >>> 23) & 255) / 128 - 1;
+    v += (n - v) * Math.min(1, pos * 2);
   }
-  ctls.push({ p, box, val, input, ch });
+  return v;
+}
+// a wavetable as Serum draws it: frames stacked in depth, faint and tinted, the one playing bright and filled
+function drawTable(c, bank, pos127, color) {
+  const { g, w, h } = fitCanvas(c), d = waveData(bank);
+  if (!d) return;
+  const F = 15, dx = w * 0.018, dy = h * 0.035, fw = w - 16 - dx * (F - 1), amp = (h - 20 - dy * (F - 1)) * 0.45;
+  const x0 = 8, base = h - 10 - amp, pos = pos127 / 127;
+  for (let f = F - 1; f >= 0; f--) {
+    const ox = x0 + f * dx, oy = base - f * dy;
+    g.strokeStyle = rgba(color, 0.14 + 0.32 * (1 - f / F));
+    g.lineWidth = 1;
+    g.beginPath();
+    for (let i = 0; i <= fw; i += 2) {
+      const y = oy - waveAt(d, bank, f / (F - 1), Math.min(255, Math.floor((i / fw) * 256))) * amp;
+      i ? g.lineTo(ox + i, y) : g.moveTo(ox + i, y);
+    }
+    g.stroke();
+  }
+  const sx = x0 + pos * dx * (F - 1), sy = base - pos * dy * (F - 1);
+  const pts = [];
+  for (let i = 0; i <= fw; i++) pts.push([sx + i, sy - waveAt(d, bank, pos, Math.min(255, Math.floor((i / fw) * 256))) * amp]);
+  g.fillStyle = rgba(color, 0.28);
+  g.beginPath(); g.moveTo(sx, sy);
+  for (const [x, y] of pts) g.lineTo(x, y);
+  g.lineTo(sx + fw, sy); g.closePath(); g.fill();
+  g.strokeStyle = color; g.lineWidth = 2.5; g.shadowColor = color; g.shadowBlur = 8;
+  g.beginPath();
+  pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  g.stroke();
+  g.shadowBlur = 0;
+}
+function fillCurve(g, pts, floor, color) {
+  g.fillStyle = rgba(color, 0.25);
+  g.beginPath(); g.moveTo(pts[0][0], floor);
+  for (const [x, y] of pts) g.lineTo(x, y);
+  g.lineTo(pts[pts.length - 1][0], floor); g.closePath(); g.fill();
+  g.strokeStyle = color; g.lineWidth = 2.5;
+  g.beginPath();
+  pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  g.stroke();
+}
+function grid(g, w, h, n) {
+  g.strokeStyle = T.line; g.lineWidth = 1;
+  for (let i = 1; i < n; i++) { g.beginPath(); g.moveTo((i * w) / n, 0); g.lineTo((i * w) / n, h); g.stroke(); }
+}
+function drawFilter(c) {
+  const { g, w, h } = fitCanvas(c);
+  grid(g, w, h, 10);
+  const fc = (P("CUT") / 127) * 10, k = 2 * (1 - (0.985 * P("RES")) / 127), m = P("MORPH") / 127;
+  const wl = m < 0.5 ? 1 - 2 * m : 0, wh = m < 0.5 ? 0 : 2 * m - 1, wb = m < 0.5 ? 2 * m : 2 - 2 * m, pts = [];
+  for (let x = 0; x <= w; x++) {
+    const r = Math.pow(2, (x / w) * 10 - fc), r2 = r * r, re = 1 - r2, im = k * r, den = re * re + im * im;
+    const nr = wl - wh * r2, ni = wb * r, hr = (nr * re + ni * im) / den, hi = (ni * re - nr * im) / den;
+    const db = Math.max(-36, Math.min(18, 10 * Math.log10(hr * hr + hi * hi + 1e-9)));
+    pts.push([x, 8 + ((18 - db) / 54) * (h - 16)]);
+  }
+  fillCurve(g, pts, h, T.acc);
+}
+function drawEnv(c, a) {
+  const { g, w, h } = fitCanvas(c);
+  const v = [0, 1, 2, 3].map((i) => patch[12 + a + i] / 127);
+  const t = v.map((x, i) => (i === 2 ? 0.6 : 0.05 + 4 * x * x * x)), tot = t.reduce((s, x) => s + x), sc = (w - 16) / tot;
+  const top = 10, bot = h - 8, sus = bot - v[2] * (bot - top);
+  let x = 8;
+  const pts = [[x, bot]];
+  x += t[0] * sc; pts.push([x, top]);
+  x += t[1] * sc; pts.push([x, sus]);
+  x += t[2] * sc; pts.push([x, sus]);
+  x += t[3] * sc; pts.push([x, bot]);
+  grid(g, w, h, 8);
+  fillCurve(g, pts, bot, T.acc);
+  g.fillStyle = T.ink;
+  for (const [px, py] of pts.slice(1, 4)) g.fillRect(px - 3, py - 3, 6, 6);
+}
+function drawLfo(c, shapeKey) {
+  const { g, w, h } = fitCanvas(c);
+  const s = (P(shapeKey) / 127) * 4, k = Math.min(3, Math.floor(s)), f = s - k, mid = h / 2, pts = [];
+  let r = 0x1234, hold = 0;
+  g.strokeStyle = T.line; g.beginPath(); g.moveTo(0, mid); g.lineTo(w, mid); g.stroke();
+  for (let x = 0; x <= w; x++) {
+    let ph = (x / w) * 2; ph -= Math.floor(ph);
+    if (((x * 8) % w) < 8) { r = (Math.imul(r, 1103515245) + 12345) >>> 0; hold = ((r >>> 16) & 255) / 128 - 1; }
+    const v = [Math.sin(2 * Math.PI * ph), ph < 0.25 ? 4 * ph : ph < 0.75 ? 2 - 4 * ph : 4 * ph - 4, 2 * ph - 1, ph < 0.5 ? 1 : -1, hold];
+    pts.push([x, mid - (v[k] + (v[k + 1] - v[k]) * f) * (h * 0.42)]);
+  }
+  g.fillStyle = rgba(T.acc, 0.25);
+  g.beginPath(); g.moveTo(0, mid);
+  for (const [x, y] of pts) g.lineTo(x, y);
+  g.lineTo(w, mid); g.closePath(); g.fill();
+  g.strokeStyle = T.acc; g.lineWidth = 2.5; g.beginPath();
+  pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  g.stroke();
+}
+
+/* ------------------------------------------------------------------------------------------- the knobs --- */
+const knobs = [];
+const BIP = new Set(["BIP", "SEMI", "CENT", "GLIDE"]);
+function knob(key, label, color = "acc") {
+  const k = { key, color, el: el("div", { class: "knob", tabIndex: 0 }) };
+  k.label = el("label", { textContent: label || M.params[PI[key]].name });
+  k.cv = el("canvas", { width: 56, height: 56 });
+  k.val = el("span", { class: "val" });
+  k.el.append(k.label, k.cv, k.val);
+  const id = () => PI[k.key];
+  let y0 = 0, v0 = 0, acc = 0;
+  k.cv.onpointerdown = (e) => { k.cv.setPointerCapture(e.pointerId); y0 = e.clientY; v0 = patch[12 + id()]; acc = 0; };
+  k.cv.onpointermove = (e) => {
+    if (!k.cv.hasPointerCapture(e.pointerId)) return;
+    acc = (y0 - e.clientY) / (e.shiftKey ? 8 : 2);
+    setParam(id(), Math.round(v0 + acc));
+  };
+  k.cv.ondblclick = () => setParam(id(), M.params[id()].def);
+  k.el.onwheel = (e) => { e.preventDefault(); setParam(id(), patch[12 + id()] + (e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? 1 : 2)); };
+  k.el.onkeydown = (e) => {
+    const d = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 10, PageDown: -10 }[e.key];
+    if (d) { e.preventDefault(); setParam(id(), patch[12 + id()] + d); }
+  };
+  k.draw = () => {
+    const p = M.params[id()], v = patch[12 + p.id] / 127, bip = BIP.has(p.kind), { g, w, h } = fitCanvas(k.cv);
+    const cx = w / 2, cy = h / 2 + 3, r = w / 2 - 6, a0 = Math.PI * 0.75, a1 = Math.PI * 2.25, col = T[k.color];
+    const av = a0 + (a1 - a0) * v, af = bip ? a0 + (a1 - a0) * 0.5 : a0;
+    g.lineCap = "round"; g.lineWidth = 5;
+    g.strokeStyle = T.track; g.beginPath(); g.arc(cx, cy, r, a0, a1); g.stroke();
+    g.strokeStyle = col; g.beginPath(); g.arc(cx, cy, r, Math.min(af, av), Math.max(af, av)); g.stroke();
+    g.fillStyle = T.panel; g.beginPath(); g.arc(cx, cy, r - 7, 0, 2 * Math.PI); g.fill();
+    g.strokeStyle = T.ink; g.lineWidth = 2.5; g.beginPath();
+    g.moveTo(cx + Math.cos(av) * 4, cy + Math.sin(av) * 4); g.lineTo(cx + Math.cos(av) * (r - 9), cy + Math.sin(av) * (r - 9)); g.stroke();
+    const t = fmt(p, patch[12 + p.id], patch.subarray(12, 76)).replace("ALWAYS ", "A ").replace("LEGATO ", "L ").replace("UNISON ", "UNI ").replace(" cents", "c").replace(" semi", " st");
+    k.val.textContent = t;
+    k.val.style.fontSize = t.length > 9 ? "15px" : t.length > 6 ? "17px" : "20px";
+    k.el.title = `${p.name}: ${t} (CC ${p.cc}) · drag, wheel or arrows; shift: fine; double-click: default`;
+  };
+  knobs.push(k);
+  return k.el;
+}
+function pick(key, label) {
+  const p = M.params[PI[key]], s = el("select");
+  for (const [v, n] of choices(p)) s.append(el("option", { value: v, textContent: n }));
+  s.onchange = () => setParam(p.id, +s.value);
+  const box = el("div", { class: "pick" }, el("label", { textContent: label || p.name }), s);
+  picks.push({ key, s, p });
   return box;
 }
-
-function wavePanel() {
-  const w = el("div", { class: "waves" });
-  for (const k of [1, 2]) {
-    const c = el("canvas", { class: "wave", width: 300, height: 90, id: `wv${k}` });
-    w.append(el("div", {}, el("b", { textContent: `WAVE ${k}` }), c));
-  }
-  return w;
+const picks = [];
+function syncPick(pk) {
+  const v = P(pk.key), ch = choices(pk.p);
+  let best = ch[0][0];
+  if (pk.p.kind === "BANK") best = ch.find(([cv]) => bankOf(cv, pk.key === "W2BANK") === bankOf(v, pk.key === "W2BANK"))[0];
+  else if (pk.p.kind === "OMMODE") best = (v >> 3) * 8 + 4;
+  else if (pk.p.kind === "OCT") best = ch[(v * 7) >> 7][0];
+  else if (pk.p.kind === "ARPRATE") best = ch[(v * 6) >> 7][0];
+  else if (pk.p.kind === "LMODE") best = v < 42 ? 20 : v < 84 ? 63 : 105;
+  else if (pk.p.kind === "ONOFF") best = v >= 64 ? 127 : 0;
+  else if (pk.p.kind === "DEST") best = v;
+  pk.s.value = best;
 }
 
-function matrixPanel() {
-  const t = el("table", { class: "matrix" });
+/* ------------------------------------------------------------------------------------------ the panels --- */
+const views = {};
+let envTab = 1, lfoTab = 0;
+const ENV = [["FILTER", ["FA", "FD", "FS", "FR"]], ["AMP", ["AA", "AD", "AS", "AR"]], ["MOD", ["MA", "MD", "MS", "MR"]]];
+const LFO = [["LFO 1", ["L1RATE", "L1SHAPE"], ["L1MODE", "L1SYNC"]], ["LFO 2", ["L2RATE", "L2SHAPE"], ["L2MODE", "L2SYNC"]]];
+const envKnobs = [], lfoKnobs = [], lfoPicks = [];
+
+function panel(cls, title, ...kids) { return el("section", { class: `panel ${cls}` }, title, ...kids); }
+function head(badge, text, extra) {
+  const h = el("h2", { class: "head" });
+  if (badge) h.append(el("span", { class: `badge ${badge === "B" ? "b" : ""}`, textContent: badge }));
+  h.append(text);
+  if (extra) h.append(extra);
+  return h;
+}
+function tabs(names, on, cb) {
+  const t = el("div", { class: "tabs" });
+  names.forEach((n, i) => {
+    const b = el("button", { textContent: n, class: i === on ? "on" : "" });
+    b.onclick = () => { [...t.children].forEach((x, j) => x.classList.toggle("on", j === i)); cb(i); };
+    t.append(b);
+  });
+  return t;
+}
+
+function build() {
+  const rack = $("rack");
+  for (const [w, k] of [["A", 1], ["B", 2]]) {
+    const bankSel = pick(k === 1 ? "W1BANK" : "W2BANK", "BANK").querySelector("select");
+    views[`wt${w}`] = el("canvas", { class: "view" });
+    const ks = el("div", { class: "knobs" });
+    if (k === 1) ks.append(knob("W1POS", "WT POS"), knob("OMAMT"), pick("OMMODE"));
+    else ks.append(knob("W2POS", "WT POS", "acc2"), knob("TUNE", null, "acc2"), knob("FINE", null, "acc2"));
+    rack.append(panel("osc", head(w, `OSC ${w}`, bankSel), views[`wt${w}`], ks));
+  }
+  rack.append(panel("voice", head(null, "VOICE"), el("div", { class: "knobs" }, knob("MIX"), knob("SPREAD"), knob("GLIDE"),
+    pick("OCT", "OCTAVE"), knob("VOL"), knob("AEGAMT", "AMP EG"))));
+  views.filter = el("canvas", { class: "view" });
+  rack.append(panel("filter", head(null, "FILTER"), views.filter,
+    el("div", { class: "knobs" }, knob("CUT"), knob("RES"), knob("MORPH"), knob("FEGAMT", "FILT EG"))));
+  views.env = el("canvas", { class: "view" });
+  const ek = el("div", { class: "knobs" });
+  ENV[envTab][1].forEach((key) => { ek.append(knob(key)); envKnobs.push(knobs[knobs.length - 1]); });
+  rack.append(panel("env", head(null, "ENVELOPES", tabs(ENV.map((e) => e[0]), envTab, (i) => {
+    envTab = i; envKnobs.forEach((kn, j) => (kn.key = ENV[i][1][j])); refresh();
+  })), views.env, ek));
+  views.lfo = el("canvas", { class: "view" });
+  const lk = el("div", { class: "knobs" });
+  LFO[0][1].forEach((key) => { lk.append(knob(key)); lfoKnobs.push(knobs[knobs.length - 1]); });
+  LFO[0][2].forEach((key) => { lk.append(pick(key)); lfoPicks.push(picks[picks.length - 1]); });
+  rack.append(panel("lfo", head(null, "LFO", tabs(LFO.map((l) => l[0]), 0, (i) => {
+    lfoTab = i;
+    lfoKnobs.forEach((kn, j) => (kn.key = LFO[i][1][j]));
+    lfoPicks.forEach((pk, j) => { pk.key = LFO[i][2][j]; pk.p = M.params[PI[pk.key]]; });
+    refresh();
+  })), views.lfo, lk));
+  const t = el("table", { class: "mtx" });
   M.srcs.forEach((s, i) => {
     const sel = el("select", { id: `md${i}` });
     M.dests.forEach((d, j) => sel.append(el("option", { value: j, textContent: d })));
     sel.onchange = () => setParam(PI.DST0 + i, +sel.value);
     const r = el("input", { type: "range", min: 1, max: 127, id: `mp${i}` });
     r.oninput = () => setParam(PI.DEP0 + i, +r.value);
-    t.append(el("tr", {}, el("td", { textContent: s }), el("td", {}, sel), el("td", {}, r), el("td", { class: "dv", id: `mv${i}` })));
+    r.ondblclick = () => setParam(PI.DEP0 + i, 64);
+    t.append(el("tr", {}, el("td", { textContent: s }), el("td", {}, sel), el("td", { class: "dep" }, r), el("td", { class: "dv", id: `mv${i}` })));
   });
-  return t;
-}
-
-function build() {
-  const pages = $("pages");
-  for (const [name, keys, extra] of PAGES) {
-    const sec = el("section", { class: "panel" }, el("h2", { textContent: name }));
-    if (extra === "waves") sec.append(wavePanel());
-    if (extra === "matrix") sec.append(matrixPanel());
-    for (const k of keys) sec.append(control(k));
-    pages.append(sec);
-  }
+  rack.append(panel("matrix", head(null, "MATRIX"), t));
+  rack.append(panel("fx", head(null, "FX"), el("div", { class: "knobs" }, knob("DIST", "DISTORT"), knob("DMIX", "DELAY"),
+    knob("DTIME"), knob("DFB"), pick("DSYNC", "DLY SYNC"))));
+  rack.append(panel("arp", head(null, "ARP-SEQ"), el("div", { class: "knobs" }, pick("ARP"), knob("TEMPO"), pick("ARPRATE", "RATE"))));
   M.presets.forEach((p, i) => {
-    const label = `${(i >> 3) + 1}-${(i & 7) + 1} ${p.name}`;
-    $("preset").append(el("option", { value: i, textContent: label }));
+    $("preset").append(el("option", { value: i, textContent: `${(i >> 3) + 1}-${(i & 7) + 1}  ${p.name}` }));
     $("slot").append(el("option", { value: i, textContent: `${(i >> 3) + 1}-${(i & 7) + 1}` }));
   });
+  THEMES.forEach((th, i) => $("theme").append(el("option", { value: i, textContent: th.name })));
 }
 
-/* ------------------------------------------------------------------------------------------- drawing --- */
-function waveData(bank) {
-  if (bank >= 9) { const u = ubank[bank - 9]; if (u) return u; bank = 0; }
-  if (!wasm) return null;
-  return new Int16Array(wasm.memory.buffer, wasm.cw_wave(bank), 5 * N);
+function drawAll() {
+  if (!views.wtA) return;
+  drawTable(views.wtA, bankOf(P("W1BANK"), false), P("W1POS"), T.acc);
+  drawTable(views.wtB, bankOf(P("W2BANK"), true), P("W2POS"), T.acc2);
+  drawFilter(views.filter);
+  drawEnv(views.env, PI[ENV[envTab][1][0]]);
+  drawLfo(views.lfo, LFO[lfoTab][1][1]);
+  knobs.forEach((k) => k.draw());
 }
-function drawWave(c, bank, pos, color) {
-  const g = c.getContext("2d"), w = c.width, h = c.height, d = waveData(bank);
-  g.clearRect(0, 0, w, h);
-  g.strokeStyle = "#bebab0";
-  g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
-  if (!d) return;
-  const m = (pos * 4) / 127, a = Math.min(3, Math.floor(m)), f = m - a;
-  g.strokeStyle = color; g.lineWidth = 3; g.beginPath();
-  for (let x = 0; x <= w; x++) {
-    const k = Math.min(255, Math.floor((x / w) * 256));
-    const v = d[a * N + k] + (d[(a + 1) * N + k] - d[a * N + k]) * f;
-    const y = h / 2 - (v / PEAK) * h * 0.44;
-    x ? g.lineTo(x, y) : g.moveTo(x, y);
-  }
-  g.stroke();
-}
-function drawSingle(c, d) {
-  const g = c.getContext("2d"), w = c.width, h = c.height;
-  g.clearRect(0, 0, w, h);
-  g.strokeStyle = "#005aaa"; g.lineWidth = 2; g.beginPath();
-  for (let x = 0; x <= w; x++) {
-    const v = d[Math.min(N - 1, Math.floor((x / w) * N))];
-    const y = h / 2 - (v / PEAK) * h * 0.44;
-    x ? g.lineTo(x, y) : g.moveTo(x, y);
-  }
-  g.stroke();
-}
-
 function refresh() {
-  const p = patch.subarray(12, 76);
-  for (const c of ctls) {
-    const v = p[c.p.id];
-    if (c.ch) {
-      let best = c.ch[0][0], bd = 999;
-      for (const [cv] of c.ch) if (Math.abs(cv - v) < bd || (c.p.kind === "DEST" && cv === v)) { bd = Math.abs(cv - v); best = cv; }
-      if (c.p.kind === "OMMODE") best = (v >> 3) * 8 + 4;
-      if (c.p.kind === "BANK") best = c.ch.find(([cv]) => bankOf(cv, c.p.key === "W2BANK") === bankOf(v, c.p.key === "W2BANK"))[0];
-      if (c.p.kind === "OCT") best = c.ch[((v * 7) >> 7)][0];
-      if (c.p.kind === "ARPRATE") best = c.ch[(v * 6) >> 7][0];
-      if (c.p.kind === "LMODE") best = v < 42 ? 20 : v < 84 ? 63 : 105;
-      if (c.p.kind === "ONOFF") best = v >= 64 ? 127 : 0;
-      c.input.value = best;
-    } else c.input.value = v;
-    c.val.textContent = fmt(c.p, v, p);
-  }
+  picks.forEach(syncPick);
   for (let i = 0; i < 8; i++) {
-    $(`md${i}`).value = p[PI.DST0 + i];
-    $(`mp${i}`).value = p[PI.DEP0 + i];
-    $(`mv${i}`).textContent = (p[PI.DEP0 + i] > 64 ? "+" : "") + (p[PI.DEP0 + i] - 64);
+    $(`md${i}`).value = P(`DST${i}`);
+    $(`mp${i}`).value = P(`DEP${i}`);
+    $(`mv${i}`).textContent = (P(`DEP${i}`) > 64 ? "+" : "") + (P(`DEP${i}`) - 64);
   }
-  drawWave($("wv1"), bankOf(P("W1BANK"), false), P("W1POS"), "#0c0e10");
-  drawWave($("wv2"), bankOf(P("W2BANK"), true), P("W2POS"), "#005aaa");
-  drawSteps();
-}
-function render() {
   $("preset").value = cur;
-  refresh();
+  drawAll();
+  drawSteps();
 }
 
 /* --------------------------------------------------------------------------------------------- the seq --- */
 function drawSteps() {
   const box = $("steps");
   box.replaceChildren();
-  const n = patch[76];
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < patch[76]; i++) {
     const s = patch[80 + i];
     const b = el("button", { textContent: s === 0 ? "REST" : (s > 64 ? "+" : "") + (s - 64), class: s === 0 ? "rest" : "" });
-    b.title = "click: up a semitone; shift-click: down; alt-click: rest / note";
     b.onclick = (e) => {
       let v = patch[80 + i];
       if (e.altKey) v = v === 0 ? 64 : 0;
@@ -206,7 +361,11 @@ function pushPatch() {
 
 /* ---------------------------------------------------------------------------------------------- audio --- */
 async function audioOn() {
-  if (ctx) { ctx.state === "running" ? await ctx.suspend() : await ctx.resume(); $("audio").textContent = ctx.state === "running" ? "Sound off" : "Sound on"; return; }
+  if (ctx) {
+    ctx.state === "running" ? await ctx.suspend() : await ctx.resume();
+    $("audio").textContent = ctx.state === "running" ? "SOUND OFF" : "SOUND ON";
+    return;
+  }
   ctx = new AudioContext({ sampleRate: 44100 });
   await ctx.audioWorklet.addModule("worklet.js");
   node = new AudioWorkletNode(ctx, "crafty", { outputChannelCount: [2] });
@@ -214,7 +373,7 @@ async function audioOn() {
   node.port.postMessage({ t: "init", wasm: await (await fetch("crafty.wasm")).arrayBuffer() });
   post({ t: "patch", bytes: patch.slice() });
   ubank.forEach((u, i) => u && post({ t: "ubank", u: i, data: u }));
-  $("audio").textContent = "Sound off";
+  $("audio").textContent = "SOUND OFF";
 }
 
 /* ----------------------------------------------------------------------------------------- the keyboard --- */
@@ -227,12 +386,10 @@ function key(n, v) {
   document.querySelectorAll(".kb .k").forEach((k) => k.classList.toggle("down", held.has(+k.dataset.n + 12 * kbOct)));
 }
 function buildKb() {
-  const kb = $("kb"), white = [0, 2, 4, 5, 7, 9, 11], base = 48;
+  const kb = $("kb"), white = [0, 2, 4, 5, 7, 9, 11], ww = 100 / 15;
   let wx = 0;
-  const ww = 100 / 15;
   for (let i = 0; i < 25; i++) {
-    const pc = i % 12, isW = white.includes(pc), n = base + i;
-    const k = el("div", { class: `k ${isW ? "w" : "b"}` });
+    const n = 48 + i, isW = white.includes(i % 12), k = el("div", { class: `k ${isW ? "w" : "b"}` });
     k.dataset.n = n;
     if (isW) { k.style.left = `${wx * ww}%`; k.style.width = `${ww}%`; wx++; }
     else { k.style.left = `${wx * ww - ww * 0.3}%`; k.style.width = `${ww * 0.6}%`; }
@@ -242,49 +399,53 @@ function buildKb() {
   }
   const map = "awsedftgyhujk";
   addEventListener("keydown", (e) => {
-    if (e.repeat || e.target.tagName === "INPUT" && e.target.type === "text") return;
+    if (e.repeat || e.metaKey || e.ctrlKey || ["INPUT", "SELECT"].includes(e.target.tagName)) return;
     if (e.key === "z") kbOct = Math.max(-2, kbOct - 1);
     if (e.key === "x") kbOct = Math.min(3, kbOct + 1);
     const i = map.indexOf(e.key);
     if (i >= 0) key(60 + i + 12 * kbOct, 100);
   });
-  addEventListener("keyup", (e) => {
-    const i = map.indexOf(e.key);
-    if (i >= 0) key(60 + i + 12 * kbOct, 0);
-  });
+  addEventListener("keyup", (e) => { const i = map.indexOf(e.key); if (i >= 0) key(60 + i + 12 * kbOct, 0); });
 }
 
 /* ------------------------------------------------------------------------------------ user wavetables --- */
 function buildUbanks() {
   const box = $("ubanks");
   for (let u = 0; u < 2; u++) {
-    let table = null, picks = [0, 0, 0, 0, 0];
+    let table = null, picksU = [0, 0, 0, 0, 0];
     const name = el("input", { type: "text", value: `USER ${u + 1}`, maxLength: 13 });
     const file = el("input", { type: "file", accept: ".wav,audio/wav" });
     const frames = el("div", { class: "frames" });
-    const info = el("span", { textContent: "No table loaded: bank 1 stands in." });
-    const send = el("button", { textContent: "Send to FM-1", disabled: true });
+    const info = el("span", { textContent: "No table loaded: bank 1 stands in.", class: "status" });
+    const send = el("button", { textContent: "SEND TO FM-1", disabled: true });
+    const view = el("canvas", { class: "view" });
     const cvs = [], rng = [];
     for (let k = 0; k < 5; k++) {
-      const c = el("canvas", { width: 120, height: 70 });
-      const r = el("input", { type: "range", min: 0, max: 0, value: 0 });
-      const lab = el("span", { textContent: `WAVE ${k + 1}` });
-      r.oninput = () => { picks[k] = +r.value; lab.textContent = `WAVE ${k + 1}: frame ${picks[k] + 1}`; update(); };
+      const c = el("canvas"), r = el("input", { type: "range", min: 0, max: 0, value: 0 }), lab = el("span", { textContent: `WAVE ${k + 1}` });
+      r.oninput = () => { picksU[k] = +r.value; lab.textContent = `WAVE ${k + 1}: FRAME ${picksU[k] + 1}`; update(); };
       cvs.push(c); rng.push([r, lab]);
       frames.append(el("div", {}, c, r, lab));
     }
     function update() {
       if (!table) return;
-      ubank[u] = makeBank(table, picks);
-      for (let k = 0; k < 5; k++) drawSingle(cvs[k], ubank[u].subarray(k * N, (k + 1) * N));
+      ubank[u] = makeBank(table, picksU);
+      drawTable(view, 9 + u, 64, T.acc);
+      cvs.forEach((c, k) => {
+        const { g, w, h } = fitCanvas(c), d = ubank[u].subarray(k * N, (k + 1) * N), pts = [];
+        for (let x = 0; x <= w; x++) pts.push([x, h / 2 - (d[Math.min(N - 1, Math.floor((x / w) * N))] / PEAK) * h * 0.42]);
+        g.fillStyle = rgba(T.acc, 0.25); g.beginPath(); g.moveTo(0, h / 2);
+        for (const [x, y] of pts) g.lineTo(x, y);
+        g.lineTo(w, h / 2); g.fill();
+        g.strokeStyle = T.acc; g.lineWidth = 2; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+      });
       post({ t: "ubank", u, data: ubank[u] });
       refresh();
     }
     file.onchange = async () => {
       try {
         table = parseWav(await file.files[0].arrayBuffer());
-        picks = defaultPicks(table.frames);
-        rng.forEach(([r, lab], k) => { r.max = table.frames - 1; r.value = picks[k]; lab.textContent = `WAVE ${k + 1}: frame ${picks[k] + 1}`; });
+        picksU = defaultPicks(table.frames);
+        rng.forEach(([r, lab], k) => { r.max = table.frames - 1; r.value = picksU[k]; lab.textContent = `WAVE ${k + 1}: FRAME ${picksU[k] + 1}`; });
         name.value = file.files[0].name.replace(/\.wav$/i, "").toUpperCase().slice(0, 13);
         info.textContent = `${table.frames} frame${table.frames > 1 ? "s" : ""} of ${table.frameSize} samples.`;
         send.disabled = false;
@@ -293,14 +454,11 @@ function buildUbanks() {
     };
     send.onclick = async () => {
       if (!dev.connected) return status("Connect the FM-1 first.");
-      try {
-        status(`Sending USER ${u + 1}...`);
-        await dev.putBank(u, bankBytes(name.value, ubank[u]));
-        status(`USER ${u + 1} is on the FM-1.`);
-      } catch (e) { status(e.message); }
+      try { status(`Sending USER ${u + 1}...`); await dev.putBank(u, bankBytes(name.value, ubank[u])); status(`USER ${u + 1} is on the FM-1.`); }
+      catch (e) { status(e.message); }
     };
-    box.append(el("div", { class: "ubank" }, el("h2", { textContent: `USER ${u + 1} (bank ${10 + u})` }),
-      el("div", { class: "row" }, file, name, send), frames, info));
+    box.append(el("div", { class: "ubank" }, el("h2", {}, el("span", { class: "badge", textContent: `U${u + 1}` }), `USER ${u + 1}`),
+      el("div", { class: "row" }, file, name, send), view, frames, info));
   }
 }
 
@@ -309,26 +467,23 @@ function status(m) { $("status").textContent = m instanceof Error ? m.message : 
 async function connect() {
   try {
     if (!navigator.requestMIDIAccess) throw new Error("This browser has no Web MIDI: use Chrome or Edge.");
-    const access = await navigator.requestMIDIAccess({ sysex: true });
-    const info = await dev.connect(access);
+    const info = await dev.connect(await navigator.requestMIDIAccess({ sysex: true }));
     $("devbox").hidden = false;
     $("devname").textContent = info.name;
     status("Connected");
     cur = info.cur;
+    $("slot").value = cur;
     await pull();
   } catch (e) { status(e); }
 }
-async function pull() {
-  const r = await dev.getPatch(127);
-  loadBytes(r.bytes);
-}
+async function pull() { loadBytes((await dev.getPatch(127)).bytes); }
 dev.onchange = () => { if (!dev.connected) { $("devbox").hidden = true; status("Not connected"); } };
 dev.oncc = (cc, v) => {
   const p = M.params.find((x) => x.cc === cc);
   if (!p) return;
   setParam(p.id, v, true);
-  const c = ctls.find((x) => x.p.id === p.id);
-  if (c) { c.box.classList.add("hit"); setTimeout(() => c.box.classList.remove("hit"), 700); }
+  const k = knobs.find((x) => PI[x.key] === p.id);
+  if (k) { k.el.classList.add("hit"); setTimeout(() => k.el.classList.remove("hit"), 700); }
 };
 dev.onevent = (e) => { cur = e.cur; pull().catch(status); };
 
@@ -336,11 +491,15 @@ dev.onevent = (e) => { cur = e.cur; pull().catch(status); };
 build();
 buildKb();
 buildUbanks();
-$("preset").onchange = async () => {
-  cur = +$("preset").value;
+async function choose(n) {
+  cur = (n + 64) % 64;
   $("slot").value = cur;
   if (dev.connected) { await dev.select(cur).catch(status); await pull().catch(status); } else factory(cur);
-};
+}
+$("preset").onchange = () => choose(+$("preset").value);
+$("prev").onclick = () => choose(cur - 1);
+$("next").onclick = () => choose(cur + 1);
+$("theme").onchange = () => setTheme(+$("theme").value);
 $("init").onclick = () => {
   const b = new Uint8Array(96);
   "INIT".split("").forEach((c, i) => (b[i] = c.charCodeAt(0)));
@@ -351,7 +510,7 @@ $("init").onclick = () => {
 };
 $("random").onclick = () => {
   const r = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-  for (const k of ["W1POS", "W2POS", "MIX", "OMAMT", "CUT", "RES", "MORPH", "FEGAMT", "FD", "FS", "L1RATE", "L1SHAPE"]) patch[12 + PI[k]] = r(0, 127);
+  for (const k of ["W1POS", "W2POS", "MIX", "OMAMT", "RES", "MORPH", "FEGAMT", "FD", "FS", "L1RATE", "L1SHAPE"]) patch[12 + PI[k]] = r(0, 127);
   patch[12 + PI.W1BANK] = r(0, 127); patch[12 + PI.W2BANK] = r(0, 127); patch[12 + PI.OMMODE] = r(0, 15) * 8 + 4;
   patch[12 + PI.SPREAD] = r(0, 1) ? r(0, 63) : r(64, 127);
   patch[12 + PI.CUT] = r(50, 127);
@@ -360,25 +519,21 @@ $("random").onclick = () => {
 };
 $("audio").onclick = () => audioOn().catch(status);
 $("connect").onclick = connect;
-$("save").onclick = async () => {
-  try { await dev.putPatch(+$("slot").value, patch); status("Saved."); } catch (e) { status(e); }
-};
+$("save").onclick = async () => { try { await dev.putPatch(+$("slot").value, patch); status("Saved."); } catch (e) { status(e); } };
 $("pull").onclick = () => pull().catch(status);
-$("reset").onclick = async () => {
-  try { await dev.resetPreset(+$("slot").value); status("Back to the factory preset."); } catch (e) { status(e); }
-};
-const addStep = (v) => {
-  if (patch[76] >= 16) return;
-  if (patch[76] === 0) patch[79] = 60;
-  patch[80 + patch[76]] = v; patch[76]++;
-  pushPatch();
-};
+$("reset").onclick = async () => { try { await dev.resetPreset(+$("slot").value); status("Back to the factory preset."); } catch (e) { status(e); } };
+const addStep = (v) => { if (patch[76] >= 16) return; if (!patch[76]) patch[79] = 60; patch[80 + patch[76]++] = v; pushPatch(); };
 $("stepadd").onclick = () => addStep(patch[76] ? patch[80 + patch[76] - 1] || 64 : 64);
 $("steprest").onclick = () => addStep(0);
 $("stepdel").onclick = () => { if (patch[76]) { patch[76]--; pushPatch(); } };
 $("stepclear").onclick = () => { patch[76] = 0; pushPatch(); };
+let th = 2;
+try { const s = localStorage.getItem("crafty-theme"); if (s !== null) th = +s; } catch (e) { /* no storage */ }
+$("theme").value = th;
+setTheme(th);
+addEventListener("resize", () => drawAll());
+factory(0);
 fetch("crafty.wasm").then((r) => r.arrayBuffer()).then((b) => WebAssembly.instantiate(b, {})).then(({ instance }) => {
   wasm = instance.exports;
-  factory(0);
+  refresh();
 });
-factory(0);

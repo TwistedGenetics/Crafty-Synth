@@ -4,8 +4,10 @@
 
 - The screen redesigned after Serum 2 and Shrub: a preset bar, OSC A and OSC B panels with each wavetable's frames
   stacked in 3D (the one playing bright and filled), arc knobs, filled envelope, LFO and filter curves.
-- Six themes, GLO -> SETUP -> THEME: CRAFT (the CRAFTsynth 2.0's white, black and blue; the default), CRAFT NIGHT,
-  SERUM, ACID, AMBER and PAPER.
+- Six themes, GLO -> SETUP -> THEME: SERUM (the default), CRAFT (the CRAFTsynth 2.0's white, black and blue), CRAFT
+  NIGHT, ACID, AMBER and PAPER.
+- The editor in the same look: OSC A / B panels with 3D stacked wavetables, arc knobs (drag, wheel, arrows,
+  double-click for the default), filled filter, envelope and LFO curves, and the same six themes (SERUM by default).
 
 ## 0.1 beta (2026-11-22)
 

@@ -5,47 +5,52 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Crafty Synth Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <div class="brand">CRAFTY SYNTH <small>editor for the M-VAVE FM-1</small></div>
-  <div class="bar">
+<header class="top">
+  <div class="logo">CRAFTY<span>SYNTH</span></div>
+  <div class="presetbox">
+    <button id="prev" class="arrow" aria-label="Previous preset">&#9664;</button>
     <select id="preset" aria-label="Preset"></select>
-    <button id="init">Init</button>
-    <button id="random">Randomise</button>
-    <button id="audio" class="go">Sound on</button>
-    <button id="connect">Connect FM-1</button>
+    <button id="next" class="arrow" aria-label="Next preset">&#9654;</button>
+  </div>
+  <div class="tools">
+    <button id="init">INIT</button>
+    <button id="random">RANDOM</button>
+    <label class="theme">THEME <select id="theme"></select></label>
+    <button id="audio" class="go">SOUND ON</button>
+    <button id="connect">CONNECT FM-1</button>
     <span id="status" class="status">Not connected</span>
   </div>
 </header>
-<main>
-  <section class="device" id="devbox" hidden>
-    <b id="devname"></b>
-    <label>Slot <select id="slot"></select></label>
-    <button id="save">Save to FM-1</button>
-    <button id="pull">Get from FM-1</button>
-    <button id="reset">Back to factory</button>
-  </section>
-  <div id="pages" class="pages"></div>
-  <section class="panel wide" id="seqpanel">
-    <h2>Arp-seq pattern <small>steps play from the last note you hold; click a step to change it</small></h2>
-    <div id="steps" class="steps"></div>
-    <div class="row">
-      <button id="stepadd">Add step</button><button id="steprest">Add rest</button><button id="stepdel">Remove last</button><button id="stepclear">Clear</button>
-    </div>
-  </section>
-  <section class="panel wide">
-    <h2>User wavetables <small>Serum, Vital or any WAV: five frames become banks 10 and 11 (USER 1, USER 2)</small></h2>
-    <div id="ubanks" class="ubanks"></div>
-  </section>
-  <section class="panel wide">
-    <h2>Play <small>click, or use the computer keys A W S E D F T G Y H U J K (Z / X: octave)</small></h2>
-    <div id="kb" class="kb"></div>
-  </section>
-  <p class="small">Crafty Synth is free software (GPL-3.0), after the Modal CRAFTsynth 2.0's design; not affiliated with Modal Electronics or M-VAVE.
-    <a href="https://github.com/TwistedGenetics/Crafty-Synth">Source and manual</a> · <a href="../flasher/">Firmware flasher</a></p>
-</main>
+<section class="device" id="devbox" hidden>
+  <b id="devname"></b>
+  <label>SLOT <select id="slot"></select></label>
+  <button id="save">SAVE TO FM-1</button>
+  <button id="pull">GET FROM FM-1</button>
+  <button id="reset">BACK TO FACTORY</button>
+</section>
+<main id="rack" class="rack"></main>
+<section class="panel wide" id="seqpanel">
+  <h2>ARP-SEQ PATTERN <small>plays from the last note you hold · click a step: up a semitone · shift-click: down · alt-click: rest</small></h2>
+  <div id="steps" class="steps"></div>
+  <div class="row">
+    <button id="stepadd">ADD STEP</button><button id="steprest">ADD REST</button><button id="stepdel">REMOVE LAST</button><button id="stepclear">CLEAR</button>
+  </div>
+</section>
+<section class="panel wide">
+  <h2>USER WAVETABLES <small>Serum, Vital or any WAV: five frames become USER 1 / USER 2 (banks 10, 11)</small></h2>
+  <div id="ubanks" class="ubanks"></div>
+</section>
+<section class="panel wide">
+  <h2>PLAY <small>click, or computer keys A W S E D F T G Y H U J K · Z / X octave</small></h2>
+  <div id="kb" class="kb"></div>
+</section>
+<p class="small">Crafty Synth is free software (GPL-3.0) after the Modal CRAFTsynth 2.0's design; its look after Serum 2 and Shrub. Not affiliated with Modal Electronics, Xfer Records or M-VAVE.
+  <a href="https://github.com/TwistedGenetics/Crafty-Synth">Source and manual</a> · <a href="../flasher/">Firmware flasher</a></p>
 <script type="module" src="app.js"></script>
 </body>
 </html>
