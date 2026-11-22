@@ -6,7 +6,7 @@ Crafty Synth ships three ways from this one repo, all running the same engine:
 |---|---|---|
 | **M-VAVE FM-1 firmware** (the original) | `src/app`, `src/hardware`, `x0x-firmware` | `firmware` |
 | **AU / VST3 / standalone (macOS)** | `ports/plugin` (JUCE; its window is `web/editor`) | `plugin-mac` |
-| **MPC plugin** (Gen1 MPC / Force) | `ports/mpc` (the `external/mpc-vst-plugins` toolkit) | `mpc` |
+| **MPC plugin** (Gen1 MPC / Force: armv7; Gen2: aarch64) | `ports/mpc` (the `external/mpc-vst-plugins` toolkit) | `mpc` |
 
 Shared by all three: `src/core` (patch, arp, value text, user area), `src/dsp` (the synth), `src/host` (the engine as
 an instance, and the editor protocol for the plugins), `web/editor` (the web editor, and the plugin's window).
@@ -24,7 +24,8 @@ an instance, and the editor protocol for the plugins), `web/editor` (the web edi
    - Rebuild the editor's engine (`sh tools/build_wasm.sh`) whenever `src/core`, `src/dsp` or `src/host` changed.
 3. **Bump `VERSION`** for anything that should be released. A push to `main` builds the FM-1 first; the plugin and
    MPC jobs only run once it has passed (`needs: firmware`), and one release `vX.Y` carries all three, the FM-1's
-   package listed first: `Crafty-Synth-X.Y.fwsc`, `Crafty-Synth-X.Y-mac.zip`, `Crafty-Synth-X.Y-mpc-armv7.zip`.
+   package listed first: `Crafty-Synth-X.Y.fwsc`, `Crafty-Synth-X.Y-mac.zip`, `Crafty-Synth-X.Y-mpc-armv7.zip`,
+   `Crafty-Synth-X.Y-mpc-aarch64.zip`.
 4. Update `CHANGELOG.md` (one entry for all ports), and the docs each change touches (`docs/MANUAL.md` for the
    FM-1, `docs/PORTS.md` for the plugins, `docs/PROTOCOL.md`).
 

@@ -209,9 +209,10 @@ jobs:
           if-no-files-found: error
 
   # -------------------------------------------------------------------------------------------------------------
-  # The MPC plugin (Gen1 MPCs and the Force: MPC One / One Retro, Live, X, Key 61), after the FM-1 has built:
-  # the community toolkit's VST2 wrapper (external/mpc-vst-plugins) around the same engine, its offline host test,
-  # the armv7 library (glibc 2.31, so MPC OS 2.x and 3.x load it) and the skin, packaged for the MPC plugin installer.
+  # The MPC plugin, after the FM-1 has built: Gen1 MPCs and the Force (armv7: MPC One / One Retro, Live, Live II, X,
+  # Key 61; glibc 2.31, so MPC OS 2.x and 3.x load it) and Gen2 MPCs (aarch64: MPC Live III and kin, MPC OS 3.x).
+  # The community toolkit's VST2 wrapper (external/mpc-vst-plugins) around the same engine, its offline host test
+  # (x86, and arm64 under QEMU), the libraries and the skin, packaged for the MPC plugin installer: one zip each.
   mpc:
     needs: firmware
     runs-on: ubuntu-latest
@@ -232,35 +233,42 @@ jobs:
       - uses: docker/setup-qemu-action@v3
         with:
           platforms: arm,arm64
-      - name: Build the plugin (armv7) and the skin
+      - name: The toolkit's offline test on arm64 (Gen2's CPU, under QEMU)
+        run: bash external/mpc-vst-plugins/tools/test_port.sh ports/mpc/vst.json aarch64
+      - name: Build the plugin (armv7 for Gen1, aarch64 for Gen2) and the skin
         run: |
           set -o pipefail
-          bash external/mpc-vst-plugins/tools/build_port.sh ports/mpc/vst.json armv7 2>&1 | grep -v "overlap by" | tail -30
-          SO=ports/mpc/build/craftysynth.so
-          file "$SO"
-          exported=$(readelf --dyn-syms -W "$SO" | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print $8}' | tr '\n' ' ')
-          [ "$exported" = "VSTPluginMain " ] || { echo "::error::exports $exported"; exit 1; }
-          glibc=$(readelf -V "$SO" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)
-          echo "::notice title=MPC plugin::$(stat -c %s "$SO") bytes, highest glibc $glibc"
+          bash external/mpc-vst-plugins/tools/build_port.sh ports/mpc/vst.json all 2>&1 | grep -v "overlap by" | tail -30
+          for SO in ports/mpc/build/craftysynth.so ports/mpc/build/aarch64/craftysynth.so; do
+            file "$SO"
+            exported=$(readelf --dyn-syms -W "$SO" | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print $8}' | tr '\n' ' ')
+            [ "$exported" = "VSTPluginMain " ] || { echo "::error::$SO exports $exported"; exit 1; }
+            glibc=$(readelf -V "$SO" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)
+            echo "::notice title=MPC plugin::$SO: $(stat -c %s "$SO") bytes, highest glibc $glibc"
+          done
       - name: Skin preview
         run: |
           mkdir -p dist preview
           python3 external/mpc-vst-plugins/tools/studio.py preview \
             "ports/mpc/build/skin/Twisted Genetics - VST - Crafty Synth/Plugin Skins" -o preview/page_%d.png >/dev/null
-      - name: Package (the MPC plugin installer's zip)
+      - name: "Package (the MPC plugin installer's zips, Gen1 and Gen2)"
         run: |
           v=$(tr -d ' \n' < VERSION)
+          for arch in armv7 aarch64; do
+          so=ports/mpc/build/craftysynth.so
+          if [ $arch = aarch64 ]; then so=ports/mpc/build/aarch64/craftysynth.so; fi
           python3 external/mpc-vst-plugins/tools/release.py \
-            --so ports/mpc/build/craftysynth.so \
+            --so $so \
             --skin "ports/mpc/build/skin/Twisted Genetics - VST - Crafty Synth" \
             --entry ports/mpc/build/pluginlist-entry.xml \
             --version "$v.0" \
             --repo TwistedGenetics/Crafty-Synth --license GPL-3.0-only --id crafty-synth \
             --about "Crafty Synth: the M-VAVE FM-1's CRAFTsynth-style wavetable synth as an MPC plugin." \
-            -o dist
-          for z in dist/*.zip; do mv "$z" "dist/Crafty-Synth-$v-mpc-armv7.zip"; done
-          python3 external/mpc-vst-plugins/tools/catalog_check.py dist/*.zip --catalog --expect-id crafty-synth \
-            --expect-repo TwistedGenetics/Crafty-Synth || echo "::warning::catalog check (listing only; the zip installs)"
+            -o out-$arch
+          mv out-$arch/*.zip "dist/Crafty-Synth-$v-mpc-$arch.zip"
+          python3 external/mpc-vst-plugins/tools/catalog_check.py "dist/Crafty-Synth-$v-mpc-$arch.zip" --catalog \
+            --expect-id crafty-synth --expect-repo TwistedGenetics/Crafty-Synth || echo "::warning::catalog check $arch (listing only)"
+          done
           ls -l dist
       - uses: actions/upload-artifact@v4
         with:
@@ -325,6 +333,7 @@ jobs:
             dist/Crafty-Synth-${{ steps.ver.outputs.version }}.fwsc
             dist/Crafty-Synth-${{ steps.ver.outputs.version }}-mac.zip
             dist/Crafty-Synth-${{ steps.ver.outputs.version }}-mpc-armv7.zip
+            dist/Crafty-Synth-${{ steps.ver.outputs.version }}-mpc-aarch64.zip
             dist/SHA256SUMS
           body: |
             Crafty Synth — a CRAFTsynth 2.0-style monophonic wavetable synth for the **M-VAVE FM-1**: 8 oscillators, 16 oscillator modifiers, spread into unison or chords, a morphing filter, three envelopes, two LFOs, an 8-slot mod matrix, glide, distortion, delay and a sequenced arpeggiator. 64 presets; your own wavetables from Serum / Vital WAVs.
@@ -333,7 +342,7 @@ jobs:
 
             **Install:** open the [web flasher](https://twistedgenetics.github.io/Crafty-Synth/flasher/) in Chrome or Edge with the FM-1 on USB, back up, and pick this release (or download `Crafty-Synth-${{ steps.ver.outputs.version }}.fwsc` and choose the file).
 
-            **Also as plugins, the same engine:** `Crafty-Synth-${{ steps.ver.outputs.version }}-mac.zip` (AU / VST3 / standalone, macOS) and `Crafty-Synth-${{ steps.ver.outputs.version }}-mpc-armv7.zip` (Gen1 MPCs and the Force, for the community MPC plugin installer). Install notes: [docs/PORTS.md](https://github.com/${{ github.repository }}/blob/main/docs/PORTS.md). Built and tested in CI; not yet tried in a DAW or on an MPC.
+            **Also as plugins, the same engine:** `Crafty-Synth-${{ steps.ver.outputs.version }}-mac.zip` (AU / VST3 / standalone, macOS) and `Crafty-Synth-${{ steps.ver.outputs.version }}-mpc-armv7.zip` (Gen1 MPCs and the Force) and `Crafty-Synth-${{ steps.ver.outputs.version }}-mpc-aarch64.zip` (Gen2 MPCs: Live III and kin), for the community MPC plugin installer. Install notes: [docs/PORTS.md](https://github.com/${{ github.repository }}/blob/main/docs/PORTS.md). Built and tested in CI; not yet tried in a DAW or on an MPC.
 
             **Editor:** [twistedgenetics.github.io/Crafty-Synth/editor](https://twistedgenetics.github.io/Crafty-Synth/editor/). Manual: [docs/MANUAL.md](https://github.com/${{ github.repository }}/blob/main/docs/MANUAL.md). What's new: [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md).
       - name: Redeploy the flasher site (lists this release)

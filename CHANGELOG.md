@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6 beta (2026-11-22)
+
+- **MPC plugin for Gen2 MPCs** (MPC Live III and kin, 64-bit ARM, MPC OS 3.x): `Crafty-Synth-0.6-mpc-aarch64.zip`,
+  beside the Gen1 / Force build (`-mpc-armv7.zip`). The same plugin, skin, presets and saved projects on both.
+- FM-1 and the Mac plugin: unchanged (rebuilt with the release, as every release carries all of them).
+
 ## 0.5 beta (2026-11-22)
 
 Crafty Synth in three forms, built from the same engine and released together, the FM-1 first (docs/PORTS.md):

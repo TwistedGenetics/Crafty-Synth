@@ -47,6 +47,7 @@
   ]
  },
  "targets": [
-  "armv7"
+  "armv7",
+  "aarch64"
  ]
 }

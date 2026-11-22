@@ -8,6 +8,7 @@ all three. Every release carries all three builds (Releases page):
 | `Crafty-Synth-X.Y.fwsc` | the M-VAVE FM-1 (install with the [web flasher](https://twistedgenetics.github.io/Crafty-Synth/flasher/)) |
 | `Crafty-Synth-X.Y-mac.zip` | macOS 11 or later, Apple Silicon and Intel: AU, VST3 and a standalone app |
 | `Crafty-Synth-X.Y-mpc-armv7.zip` | Gen1 MPCs and the Force (MPC One / One Retro, Live, Live II, X, Key 61) |
+| `Crafty-Synth-X.Y-mpc-aarch64.zip` | Gen2 MPCs (MPC Live III and kin; MPC OS 3.x) |
 
 **Status: built and tested in CI, not yet tried in a DAW or on an MPC.**
 
@@ -37,12 +38,17 @@ the way they work on an FM-1.
 
 ## MPC
 
-**Needs** a Gen1 MPC or Force with plugin support for third-party VSTs (an SSH-enabled MPC OS, as for any plugin
-from the community [MPC plugin installer](https://github.com/sd88me/mpc-vst-plugins)). Gen2 MPCs (Live III and
-later) aren't supported by the toolkit yet.
+**Needs** an MPC or Force that takes third-party plugins (root / SSH access, as for any plugin from the community
+[MPC plugin installer](https://github.com/sd88me/mpc-vst-plugins)). Pick the zip for your MPC's generation:
 
-**Install:** drop `Crafty-Synth-X.Y-mpc-armv7.zip` into the community MPC plugin installer, or unzip it and follow
-its `INSTALL.md`. On the MPC, add **Crafty Synth** to a plugin track.
+- **Gen1** (MPC One / One Retro, Live, Live II, X, Key 61, Force): `Crafty-Synth-X.Y-mpc-armv7.zip`.
+- **Gen2** (MPC Live III and kin): `Crafty-Synth-X.Y-mpc-aarch64.zip`. Getting plugins onto a Gen2 needs root, which
+  the toolkit documents for MPC OS 3.9.1 (the autorun USB stick, its `docs/USB_STICK.md`); MPC OS 3.10 removed that
+  route, and no other is known yet. On Gen2 the plugin goes on the internal drive's `Synths` folder (`/nvme/Synths`),
+  which the installer picks by itself.
+
+**Install:** drop the zip into the community MPC plugin installer, or unzip it and follow its `INSTALL.md`. On the
+MPC, add **Crafty Synth** to a plugin track. A project saved on one generation opens on the other.
 
 **Pages** (Q-Links follow the page, 16 per page on two banks):
 
@@ -60,7 +66,8 @@ its `INSTALL.md`. On the MPC, add **Crafty Synth** to a plugin track.
 - **Values read as on the FM-1** (cutoff in Hz, delay in divisions, LADDER, HALL...). Lists (banks, modifiers,
   filter types, reverb modes, matrix destinations) open as pop-ups.
 - **Your user presets and wavetables**: copy `Crafty Synth.user` from your Mac (path above) into the plugin's `data`
-  folder on the MPC (`/sdcard/Synths/Twisted Genetics - VST - Crafty Synth/data/`). Updating the plugin keeps it.
+  folder on the MPC (`Synths/Twisted Genetics - VST - Crafty Synth/data/`: under `/sdcard` on Gen1, `/nvme` on
+  Gen2). Updating the plugin keeps it.
 - **The arp-seq follows the MPC's tempo and transport.** The MPC project keeps the patch.
 
 ## How it's built
