@@ -4,3 +4,6 @@
 [submodule "external/mpc-vst-plugins"]
 	path = external/mpc-vst-plugins
 	url = https://github.com/sd88me/mpc-vst-plugins
+[submodule "external/mpc-plugin-builder-sdk"]
+	path = external/mpc-plugin-builder-sdk
+	url = https://github.com/inmusic-software/mpc-plugin-builder-sdk

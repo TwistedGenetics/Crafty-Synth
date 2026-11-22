@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7 beta (2026-11-22)
+
+- **MPC: Akai's official plugin format (MPC OS 3.10.1+).** `Crafty-Synth-0.7-mpc.zip` is one folder for every MPC and
+  the Force, Gen1 and Gen2: turn on External Plugin Support, copy it into a `VST2 Plugins` folder, restart. No root.
+  Made with Akai's MPC Plugin SDK (its converter and validator) from the same builds; the community-installer zips
+  stay for older MPC OS.
+- FM-1 and the Mac plugin: unchanged.
+
 ## 0.6 beta (2026-11-22)
 
 - **MPC plugin for Gen2 MPCs** (MPC Live III and kin, 64-bit ARM, MPC OS 3.x): `Crafty-Synth-0.6-mpc-aarch64.zip`,

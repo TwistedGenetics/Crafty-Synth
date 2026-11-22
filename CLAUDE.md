@@ -24,8 +24,8 @@ an instance, and the editor protocol for the plugins), `web/editor` (the web edi
    - Rebuild the editor's engine (`sh tools/build_wasm.sh`) whenever `src/core`, `src/dsp` or `src/host` changed.
 3. **Bump `VERSION`** for anything that should be released. A push to `main` builds the FM-1 first; the plugin and
    MPC jobs only run once it has passed (`needs: firmware`), and one release `vX.Y` carries all three, the FM-1's
-   package listed first: `Crafty-Synth-X.Y.fwsc`, `Crafty-Synth-X.Y-mac.zip`, `Crafty-Synth-X.Y-mpc-armv7.zip`,
-   `Crafty-Synth-X.Y-mpc-aarch64.zip`.
+   package listed first: `Crafty-Synth-X.Y.fwsc`, `Crafty-Synth-X.Y-mac.zip`, `Crafty-Synth-X.Y-mpc.zip` (Akai's official format, MPC OS
+   3.10.1+, every MPC), `Crafty-Synth-X.Y-mpc-armv7.zip` and `-mpc-aarch64.zip` (the community installer).
 4. Update `CHANGELOG.md` (one entry for all ports), and the docs each change touches (`docs/MANUAL.md` for the
    FM-1, `docs/PORTS.md` for the plugins, `docs/PROTOCOL.md`).
 
