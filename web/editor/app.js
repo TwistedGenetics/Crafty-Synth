@@ -47,7 +47,11 @@ let cur = 0;
 const dev = new Device();
 let ctx = null, node = null, wasm = null;
 
-function post(m) { if (node) node.port.postMessage(m); }
+const pending = [];                   // notes played while the audio starts: they sound once it has
+function post(m) {
+  if (node) node.port.postMessage(m);
+  else if (m.t === "key" && pending.length < 64) pending.push(m);
+}
 function loadBytes(b) { patch.set(b); post({ t: "patch", bytes: patch.slice() }); refresh(); }
 function factory(n) { loadBytes(Uint8Array.from(M.presets[n].bytes)); }
 function setParam(id, v, fromDevice = false) {
@@ -360,21 +364,116 @@ function pushPatch() {
 }
 
 /* ---------------------------------------------------------------------------------------------- audio --- */
-async function audioOn() {
-  if (ctx) {
-    ctx.state === "running" ? await ctx.suspend() : await ctx.resume();
-    $("audio").textContent = ctx.state === "running" ? "SOUND OFF" : "SOUND ON";
-    return;
+// The firmware's engine renders in an AudioWorklet; where that can't start (an old browser, a page that blocks
+// WebAssembly in workers) it runs on the main thread through a ScriptProcessor instead. Audio starts on the first
+// click or key anywhere (browsers allow sound only after one); SOUND ON / OFF mutes it.
+let audioState = "off", muted = false, gain = null, meter = null, sp = null, starting = null;
+function handleMain(e, d) {      // the same messages as worklet.js, for the main-thread fallback
+  const mem = () => new Uint8Array(e.memory.buffer);
+  switch (d.t) {
+    case "patch": mem().set(d.bytes, e.cw_patch()); e.cw_apply(); break;
+    case "param": e.cw_param(d.id, d.v); break;
+    case "key": e.cw_key(d.n, d.v); break;
+    case "alloff": e.cw_all_off(); break;
+    case "ctl": e.cw_ctl(d.src, d.v); break;
+    case "ubank": new Int16Array(e.memory.buffer, e.cw_ubank(d.u), 5 * 256).set(d.data); e.cw_ubank_changed(d.u); break;
   }
-  ctx = new AudioContext({ sampleRate: 44100 });
-  await ctx.audioWorklet.addModule("worklet.js");
-  node = new AudioWorkletNode(ctx, "crafty", { outputChannelCount: [2] });
-  node.connect(ctx.destination);
-  node.port.postMessage({ t: "init", wasm: await (await fetch("crafty.wasm")).arrayBuffer() });
-  post({ t: "patch", bytes: patch.slice() });
-  ubank.forEach((u, i) => u && post({ t: "ubank", u: i, data: u }));
-  $("audio").textContent = "SOUND OFF";
 }
+async function startWorklet(bytes) {
+  await ctx.audioWorklet.addModule("worklet.js");
+  const n = new AudioWorkletNode(ctx, "crafty", { outputChannelCount: [2] });
+  await new Promise((ok, bad) => {
+    const t = setTimeout(() => bad(new Error("the audio worker didn't start")), 4000);
+    n.port.onmessage = (m) => {
+      if (m.data.t === "ready") { clearTimeout(t); ok(); }
+      if (m.data.t === "error") { clearTimeout(t); bad(new Error(m.data.msg)); }
+    };
+    n.port.postMessage({ t: "init", wasm: bytes });
+  });
+  return n;
+}
+async function startMain(bytes) {     // the fallback: the engine on this thread
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const e = instance.exports;
+  e.cw_init();
+  sp = ctx.createScriptProcessor(1024, 0, 2);
+  sp.onaudioprocess = (ev) => {
+    const L = ev.outputBuffer.getChannelData(0), R = ev.outputBuffer.getChannelData(1);
+    for (let k = 0; k < L.length; k += 128) {
+      const m = Math.min(128, L.length - k), f = new Float32Array(e.memory.buffer, e.cw_render(m), 2 * m);
+      for (let i = 0; i < m; i++) { L[k + i] = f[2 * i]; R[k + i] = f[2 * i + 1]; }
+    }
+  };
+  return { port: { postMessage: (d) => handleMain(e, d) }, connect: (x) => sp.connect(x) };
+}
+function ensureAudio() {
+  if (starting) return starting;
+  starting = (async () => {
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = "playback";   // iOS: sound with the silent switch on
+      const AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC({ sampleRate: 44100 });
+      if (ctx.state !== "running") await ctx.resume();
+      const bytes = await (await fetch("crafty.wasm")).arrayBuffer();
+      gain = ctx.createGain();
+      meter = ctx.createAnalyser();
+      meter.fftSize = 1024;
+      gain.connect(meter);
+      meter.connect(ctx.destination);
+      let how = "worklet";
+      try {
+        if (!ctx.audioWorklet) throw new Error("no AudioWorklet");
+        node = await startWorklet(bytes.slice(0));
+      } catch (err) {
+        console.warn("Crafty Synth: the audio worker failed, using the main thread:", err);
+        node = await startMain(bytes);
+        how = "main thread";
+      }
+      node.connect(gain);
+      post({ t: "patch", bytes: patch.slice() });
+      ubank.forEach((u, i) => u && post({ t: "ubank", u: i, data: u }));
+      for (const m of pending.splice(0)) post(m);
+      audioState = "on";
+      status(`Sound on (${Math.round(ctx.sampleRate / 100) / 10} kHz, ${how})`);
+      $("audio").textContent = "SOUND OFF";
+      $("audio").classList.remove("go");
+      runMeter();
+    } catch (err) {
+      audioState = "failed";
+      starting = null;
+      status(`No sound: ${err.message || err}`);
+    }
+  })();
+  return starting;
+}
+async function wake() {               // a browser may suspend audio (a tab in the background, iOS): resume it
+  if (!ctx) return ensureAudio();
+  if (ctx.state !== "running") { try { await ctx.resume(); } catch (e) { /* the next gesture tries again */ } }
+}
+function runMeter() {
+  const bar = $("meter"), a = new Float32Array(meter.fftSize);
+  let level = 0;
+  const tick = () => {
+    meter.getFloatTimeDomainData(a);
+    let pk = 0;
+    for (const x of a) pk = Math.max(pk, Math.abs(x));
+    level = Math.max(pk, level * 0.9);
+    bar.style.width = `${Math.min(100, level * 140)}%`;
+    requestAnimationFrame(tick);
+  };
+  tick();
+}
+async function soundButton() {
+  if (!ctx || audioState !== "on") { await ensureAudio(); muted = false; return; }
+  muted = !muted;
+  gain.gain.value = muted ? 0 : 1;
+  if (!muted) await wake();
+  $("audio").textContent = muted ? "SOUND ON" : "SOUND OFF";
+  $("audio").classList.toggle("go", muted);
+  status(muted ? "Muted" : "Sound on");
+}
+addEventListener("pointerdown", () => { if (audioState === "off" || audioState === "on") wake(); }, true);
+addEventListener("keydown", () => { if (audioState === "off" || audioState === "on") wake(); }, true);
 
 /* ----------------------------------------------------------------------------------------- the keyboard --- */
 let kbOct = 0;
@@ -517,7 +616,7 @@ $("random").onclick = () => {
   patch[12 + PI.DST0] = r(1, 13); patch[12 + PI.DEP0] = r(40, 90);
   pushPatch();
 };
-$("audio").onclick = () => audioOn().catch(status);
+$("audio").onclick = (e) => { e.stopPropagation(); soundButton(); };
 $("connect").onclick = connect;
 $("save").onclick = async () => { try { await dev.putPatch(+$("slot").value, patch); status("Saved."); } catch (e) { status(e); } };
 $("pull").onclick = () => pull().catch(status);

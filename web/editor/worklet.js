@@ -9,12 +9,16 @@ class Crafty extends AudioWorkletProcessor {
     this.port.onmessage = async (m) => {
       const d = m.data;
       if (d.t === "init") {
-        const { instance } = await WebAssembly.instantiate(d.wasm, {});
-        this.e = instance.exports;
-        this.e.cw_init();
-        for (const x of this.q) this.handle(x);
-        this.q = [];
-        this.port.postMessage({ t: "ready" });
+        try {
+          const { instance } = await WebAssembly.instantiate(d.wasm, {});
+          this.e = instance.exports;
+          this.e.cw_init();
+          for (const x of this.q) this.handle(x);
+          this.q = [];
+          this.port.postMessage({ t: "ready", rate: sampleRate });
+        } catch (err) {
+          this.port.postMessage({ t: "error", msg: String(err && err.message || err) });
+        }
       } else if (!this.e) this.q.push(d);
       else this.handle(d);
     };
