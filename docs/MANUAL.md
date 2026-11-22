@@ -1,4 +1,4 @@
-# Crafty Synth manual (0.2)
+# Crafty Synth manual (0.3)
 
 Crafty Synth makes the M-VAVE FM-1 a monophonic wavetable synth after the Modal CRAFTsynth 2.0. This page covers the
 FM-1's panel. For what each part of the engine does, the CRAFTsynth 2.0 manual's "Synthesis engine" chapter applies
