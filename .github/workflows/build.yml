@@ -274,12 +274,8 @@ jobs:
         run: |
           set -o pipefail
           v=$(tr -d ' \n' < VERSION)
-          SDK=external/mpc-plugin-builder-sdk/tools
-          python3 $SDK/legacy_convert.py "dist/Crafty-Synth-$v-mpc-armv7.zip" "dist/Crafty-Synth-$v-mpc-aarch64.zip" \
-            --out official --zip 2>&1 | tail -10
-          python3 $SDK/validate.py "official/Twisted Genetics - VST - Crafty Synth" 2>&1 | tail -30
-          cat "official/Twisted Genetics - VST - Crafty Synth/plugin.json"
-          mv official/*-mpc.zip "dist/Crafty-Synth-$v-mpc.zip"
+          python3 ports/mpc/official.py "dist/Crafty-Synth-$v-mpc-armv7.zip" "dist/Crafty-Synth-$v-mpc-aarch64.zip" \
+            -o "dist/Crafty-Synth-$v-mpc.zip"
           ls -l dist
       - uses: actions/upload-artifact@v4
         with:
