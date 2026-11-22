@@ -1,0 +1,129 @@
+# Crafty Synth: the panel end to end on the simulated FM-1
+wait 300
+expect preset 0
+expect page 0
+expect bank1 0
+shot boot.ppm
+wav basic.wav
+# a key: F3, the synth and MIDI out
+key 0 down
+wait 300
+expect gate 1
+expect note 53
+expect midiout 1
+key 0 up
+wait 200
+expect peak >2000
+# OSC page: K1 is WAVE 1, its CC goes out
+turn K1 -20
+expect param.0 107
+expect dirty 1
+shot osc_turned.ppm
+wait 1600
+shot osc.ppm
+# HOME again: WAVES; bank 1 -> MATH (third bank), built
+tap HOME
+expect page 1
+turn K1 2
+wait 20
+expect bank1 2
+# ALGO: the oscillator modifier, a mode a detent
+turn ALGO 3
+expect param.7 28
+shot waves.ppm
+# EDIT: the filter
+tap EDIT
+expect page 3
+turn K1 -40
+expect param.12 87
+wait 1600
+shot filter.ppm
+# hold LFO and turn CUTOFF: LFO 1 > CUTOFF
+press LFO
+turn K1 10
+release LFO
+expect param.51 11
+expect param.43 74
+expect page 3
+shot assign.ppm
+# ENV: the filter EG, again: the amp EG
+tap ENV
+expect page 4
+tap ENV
+expect page 5
+wait 1600
+shot amp_eg.ppm
+# LFO page, MATRIX page
+tap LFO
+expect page 7
+wait 1600
+shot lfo.ppm
+tap SEL
+expect page 9
+shot matrix.ppm
+# MIDI in: CC 34 (cutoff), program change, notes
+midi B0 22 30
+expect param.12 48
+midi 90 30 64
+wait 100
+expect gate 1
+expect note 48
+midi 80 30 00
+midi C0 11 00
+wait 20
+expect preset 17
+shot preset18.ppm
+# the arp: on, two keys held, it steps
+tap ARP
+expect param.59 127
+key 0 down
+key 4 down
+wait 400
+expect arp 1
+expect peak >1000
+key 0 up
+key 4 up
+wait 300
+expect arp 0
+# SEQ held + keys: a pattern of 3 and a rest
+tap SEQ
+expect page 13
+press SEQ
+tapkey 0 50
+tapkey 3 50
+tap REC
+tapkey 7 50
+release SEQ
+expect steps 4
+expect page 13
+shot seq.ppm
+# latch: the note goes on after the key is let go
+tap ARP
+expect param.59 0
+tap REC
+expect latch 1
+tapkey 12 50
+wait 100
+expect gate 1
+tap REC
+expect gate 0
+# SAVE into 8-8, rename, reboot: it is there
+tap SAVE
+expect page 17
+turn PRESET 99
+turn K4 3
+shot save.ppm
+tap SAVE
+expect dirty 0
+expect preset 63
+reboot
+wait 100
+expect preset 63
+expect steps 4
+# the editor: INFO, a patch read back
+sysex 28
+expect reply.0 67
+sysex 29 3F
+expect reply.0 63
+expect reply.1 1
+wavstop

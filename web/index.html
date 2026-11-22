@@ -1,0 +1,34 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crafty Synth</title>
+<style>
+  body { margin: 0; background: #f6f4ef; color: #121417; font: 19px/1.5 -apple-system, "Segoe UI", Roboto, system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 20px; }
+  h1 { font-size: 44px; margin: 0 0 4px; }
+  .lead { font-size: 21px; color: #3b4048; margin: 0 0 28px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  a.card { display: block; background: #fff; border: 3px solid #121417; border-radius: 16px; padding: 20px; color: #121417; text-decoration: none; }
+  a.card:hover { background: #ffe58a; }
+  a.card b { font-size: 26px; display: block; margin-bottom: 6px; }
+  p.small { color: #3b4048; font-size: 17px; margin-top: 28px; }
+  a { color: #0b4aa8; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Crafty Synth</h1>
+  <p class="lead">A CRAFTsynth 2.0-style monophonic wavetable synth for the M-VAVE FM-1: 8 oscillators, 16 oscillator modifiers, spread into unison or chords, a morphing filter, 3 envelopes, 2 LFOs, an 8-slot mod matrix, distortion, delay and a sequenced arpeggiator.</p>
+  <div class="cards">
+    <a class="card" href="editor/"><b>Editor</b>Edit every value, hear it here (the firmware's own engine), manage the 64 presets and turn Serum / Vital wavetables into user banks.</a>
+    <a class="card" href="editor/?demo"><b>Try the demo</b>The editor with a simulated FM-1.</a>
+    <a class="card" href="flasher/"><b>Firmware flasher</b>Install Crafty Synth on the FM-1 from Chrome or Edge.</a>
+  </div>
+  <p class="small">Beta, not yet tried on a real FM-1. Read the <a href="https://github.com/TwistedGenetics/Crafty-Synth/blob/main/docs/RECOVERY.md">recovery guide</a> before you install anything.
+    Source: <a href="https://github.com/TwistedGenetics/Crafty-Synth">github.com/TwistedGenetics/Crafty-Synth</a>. Free software, GPL-3.0. Not affiliated with M-VAVE.</p>
+</main>
+</body>
+</html>

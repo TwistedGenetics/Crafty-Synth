@@ -1,0 +1,69 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * FM1-Craft: the sound engine, after the Modal CRAFTsynth 2.0 (its manual, OS 1.4): a monophonic wavetable synth
+ * of 8 oscillators (4 on Wave 1, 4 on Wave 2), 16 oscillator modifiers (Wave 1 the carrier, Wave 2 the modulator),
+ * SPREAD into unison or chord shapes, a 2-pole state-variable filter morphing low-pass -> band-pass -> high-pass,
+ * three ADSR envelopes (filter, amp, mod), two LFOs (LFO 2 up to audio rate, locked to the note), an 8-slot mod
+ * matrix (one slot per source), glide with legato, a waveshaping distortion and a delay.
+ * Single-precision float, no libm. The editor runs this same file built to WebAssembly.
+ * Copyright (C) 2026 Jamie (TwistedGenetics). */
+#pragma once
+#include <stdint.h>
+#include "cr_patch.h"
+#include "cr_wt.h"
+
+#define CR_CTRL 4u                     /* modulation, envelopes and pitches: every 4 samples (11 kHz: LFO 2 reaches audio rate) */
+#define CR_PAIRS 4u                    /* a pair: one Wave 1 and one Wave 2 oscillator (8 in all) */
+#define CR_DLY_LEN 65536u              /* the delay's memory, 16-bit mono: 1.49 s at 44.1 kHz */
+#define CR_NHELD 16u
+
+typedef struct {
+    uint8_t st;                        /* 0 off, 1 attack, 2 decay / sustain, 3 release */
+    float lv, rel0;
+} cr_env_t;
+
+typedef struct {
+    float p1, p2, pm;                  /* Wave 1's phase, Wave 2's, the note's master phase (the sync modes) */
+    float inc1, inc2, incm;
+    float hold, hacc;                  /* DE-REZ: the held sample */
+    uint32_t lv1, lv2;                 /* the mip level each reads */
+} cr_pair_t;
+
+typedef struct {
+    float base[CR_NP];                 /* the patch, 0..1 */
+    uint8_t raw[CR_NP];
+    float eff[CR_ND];                  /* this block's values after the matrix, by destination */
+    const cr_wtbank_t *t1, *t2;
+    uint32_t noise2;                   /* Wave 2 is the sine / noise bank */
+    cr_pair_t pr[CR_PAIRS];
+    uint32_t npair;                    /* 1 when SPREAD is 0 (one pair does: the others would be the same) */
+    /* notes */
+    uint8_t held[CR_NHELD], nheld, note, gate, legato_ok;
+    float vel, pitch, target, bend;    /* pitch in semitones (MIDI note numbers) */
+    float modw, expr, aftt;
+    /* envelopes, LFOs */
+    cr_env_t env[3];                   /* filter, amp, mod */
+    float lph[2], lval[2], lsh[2], lstop[2];
+    uint32_t rng;
+    float tempo;
+    /* the audio path */
+    float ic1, ic2, g_a1, g_a2, g_a3, g_k, morph;
+    float amp, amp_prev, noise_lp, dist_g, dist_mix;
+    int16_t *dl;
+    uint32_t dl_w;
+    float dl_pos, dl_target, dl_fb, dl_mix, dl_lp, dl_hp;
+    float out_gain;
+} cr_synth_t;
+
+void cr_synth_init(cr_synth_t *s, int16_t *dly_mem /* CR_DLY_LEN */);
+void cr_synth_patch(cr_synth_t *s, const cr_patch_t *p);       /* all of a patch's values */
+void cr_synth_param(cr_synth_t *s, uint32_t id, uint32_t v);   /* one value (a knob, a CC) */
+void cr_synth_tables(cr_synth_t *s, const cr_wtbank_t *w1, const cr_wtbank_t *w2, int w2_noise);
+void cr_synth_tempo(cr_synth_t *s, float bpm);
+void cr_synth_on(cr_synth_t *s, uint32_t note, uint32_t vel);
+void cr_synth_off(cr_synth_t *s, uint32_t note);
+void cr_synth_all_off(cr_synth_t *s);
+void cr_synth_ctl(cr_synth_t *s, uint32_t src, float v);       /* CR_S_MODW / EXPR / AFTT: 0..1 */
+void cr_synth_bend(cr_synth_t *s, float semis);
+/* writes n stereo frames (L R; the CRAFTsynth is mono: both the same), -1..1 */
+void cr_synth_render(cr_synth_t *s, float *lr, uint32_t n);
+int cr_synth_sounding(const cr_synth_t *s);
