@@ -33,17 +33,28 @@ static cr_patch_t cr_p;                          /* the working patch: what soun
 static cr_globals_t cr_g;
 static cr_synth_t cr_syn;
 static cr_arp_t cr_arp;
-static int16_t cr_dly[CR_DLY_LEN] X0X_POOL;      /* the delay: 128 KB */
+static int16_t cr_mem[CR_SYN_MEM] X0X_POOL;      /* the synth's memory (delay, reverb, chorus, comb): 144 KB */
 static cr_wtbank_t cr_tab[3] X0X_POOL;           /* banks ready to play: Wave 1's, Wave 2's, one being built */
 static uint8_t cr_tab_bank[3] = {0xFF, 0xFF, 0xFF};
+/* the user area in flash: 128 user presets (4 sectors of 32), then 32 user wavetable banks (a sector each) */
 typedef struct {
     uint8_t magic, ver;
     char name[14];
     int16_t w[5][CR_WT_N];
-} cr_ubank_t;                                    /* a user wavetable bank in flash (Serum import): 2,576 B */
+} cr_ubank_t;                                    /* a user wavetable bank (Serum import): 2,576 B */
 #define CR_UBANK_MAGIC 0xC7u
-static cr_ubank_t cr_ub[CR_NUBANK] X0X_POOL;
-static uint8_t cr_obj[PLAT_STORE_MAX] X0X_POOL;  /* a store object being read or written */
+#define CR_FL_PRESETS 0x00000u                   /* 128 x 128 B */
+#define CR_FL_BANKS 0x04000u                     /* 32 x 4 KB */
+#define CR_SECTOR 0x1000u
+_Static_assert(CR_FL_BANKS + CR_NUBANK * CR_SECTOR <= CR_FLASH_SIZE, "the user area");
+_Static_assert(CR_NUSER * CR_PATCH_BYTES <= CR_FL_BANKS, "the user presets' sectors");
+static cr_ubank_t cr_ubw X0X_POOL;               /* a bank coming in from the editor */
+static uint8_t cr_sec[CR_SECTOR] X0X_POOL;       /* a sector being rewritten */
+static const cr_ubank_t *cr_ubank(uint32_t u)    /* user bank u in flash, or 0 (empty) */
+{
+    const cr_ubank_t *b = (const cr_ubank_t *)cr_flash_ptr(CR_FL_BANKS + u * CR_SECTOR);
+    return u < CR_NUBANK && b->magic == CR_UBANK_MAGIC && b->ver == 1u ? b : 0;
+}
 static float cr_fbuf[2u * 128u];
 static uint8_t cr_dirty;                         /* the working patch differs from its preset */
 static volatile uint8_t cr_want_tables = 1, cr_want_draw;
@@ -52,20 +63,24 @@ static volatile uint32_t cr_clock_n, cr_clock_t0, cr_clock_ms;
 static volatile uint8_t cr_clock_seen;
 static volatile float cr_clock_bpm;
 
-enum { PG_OSC, PG_WAVES, PG_TUNE, PG_FILTER, PG_FEG, PG_AEG, PG_MEG, PG_LFO1, PG_LFO2, PG_MATRIX, PG_FX, PG_OUT,
-       PG_ARP, PG_SEQ, PG_GLOB, PG_GLOB2, PG_GLOB3, PG_SAVE, PG_N };
-static const char *const CR_PG_NAME[PG_N] = {"OSC", "WAVES", "TUNE", "FILTER", "FILTER EG", "AMP EG", "MOD EG",
-    "LFO 1", "LFO 2", "MATRIX", "FX", "OUTPUT", "ARP", "SEQ", "MIDI", "KEYS", "SETUP", "SAVE"};
+enum { PG_OSC, PG_WAVES, PG_OSCB, PG_TUNE, PG_FILTER, PG_FEG, PG_AEG, PG_MEG, PG_LFO1, PG_LFO2, PG_MATRIX, PG_FX,
+       PG_OUT, PG_SPACE, PG_SPACE2, PG_COLOUR, PG_CRUSH, PG_ARP, PG_SEQ, PG_GLOB, PG_GLOB2, PG_GLOB3, PG_SAVE, PG_N };
+static const char *const CR_PG_NAME[PG_N] = {"OSC", "WAVES", "OSC B", "TUNE", "FILTER", "FILTER EG", "AMP EG",
+    "MOD EG", "LFO 1", "LFO 2", "MATRIX", "FX", "OUTPUT", "REVERB", "REVERB 2", "MOD FX", "CRUSH", "ARP", "SEQ",
+    "MIDI", "KEYS", "SETUP", "SAVE"};
 /* the page's four knobs: a patch parameter, or one of the G_ values (globals and page controls) */
 enum { G_NONE = 100, G_MSRC, G_MDST, G_MDEP, G_STEPS, G_MCH, G_MIN, G_CLOCK, G_BEND, G_KEYS, G_SCALE, G_ROOT,
        G_VELO, G_LOCAL, G_BREATH, G_ARPOUT, G_SLOT, G_CPOS, G_CHAR, G_THEME };
 static const uint8_t CR_PAGE_P[PG_N][4] = {
     {CR_W1POS, CR_W2POS, CR_MIX, CR_OMAMT},   {CR_W1BANK, CR_W2BANK, CR_OMMODE, CR_SPREAD},
-    {CR_TUNE, CR_FINE, CR_OCT, CR_GLIDE},     {CR_CUT, CR_RES, CR_MORPH, CR_FEGAMT},
+    {CR_BMODE, CR_BAMT, CR_W2POS, CR_TUNE},   {CR_TUNE, CR_FINE, CR_OCT, CR_GLIDE},
+    {CR_CUT, CR_RES, CR_MORPH, CR_FTYPE},
     {CR_FA, CR_FD, CR_FS, CR_FR},             {CR_AA, CR_AD, CR_AS, CR_AR},
     {CR_MA, CR_MD, CR_MS, CR_MR},             {CR_L1RATE, CR_L1SHAPE, CR_L1MODE, CR_L1SYNC},
     {CR_L2RATE, CR_L2SHAPE, CR_L2MODE, CR_L2SYNC}, {G_MSRC, G_MDST, G_MDEP, G_NONE},
-    {CR_DIST, CR_DMIX, CR_DTIME, CR_DFB},     {CR_DSYNC, CR_VOL, CR_AEGAMT, CR_GLIDE},
+    {CR_DIST, CR_DMIX, CR_DTIME, CR_DFB},     {CR_DSYNC, CR_VOL, CR_AEGAMT, CR_FEGAMT},
+    {CR_VMODE, CR_VSIZE, CR_VDECAY, CR_VMIX}, {CR_VWARP, CR_VDENS, CR_VMOD, CR_VMIX},
+    {CR_CHMIX, CR_CHRATE, CR_PHMIX, CR_PHRATE}, {CR_ERA, CR_CRUSH, CR_OTT, CR_DIST},
     {CR_ARP, CR_TEMPO, CR_ARPRATE, G_STEPS},  {G_STEPS, CR_TEMPO, CR_ARPRATE, CR_ARP},
     {G_MCH, G_MIN, G_CLOCK, G_BEND},          {G_KEYS, G_SCALE, G_ROOT, G_VELO},
     {G_LOCAL, G_BREATH, G_ARPOUT, G_THEME},    {G_SLOT, G_NONE, G_CPOS, G_CHAR},
@@ -172,8 +187,8 @@ static void cr_midi3(uint32_t st, uint32_t d1, uint32_t d2)
 static const int16_t (*cr_bank_base(uint32_t b))[CR_WT_N]
 {
     if (b >= CR_NBANK) {
-        const cr_ubank_t *u = &cr_ub[(b - CR_NBANK) % CR_NUBANK];
-        return u->magic == CR_UBANK_MAGIC ? (const int16_t (*)[CR_WT_N])u->w : cr_wt_factory(0);
+        const cr_ubank_t *u = cr_ubank(b - CR_NBANK);
+        return u ? (const int16_t (*)[CR_WT_N])u->w : cr_wt_factory(0);
     }
     return cr_wt_factory(b);
 }
@@ -213,57 +228,116 @@ static void cr_tables(void)
     cr_synth_tables(&cr_syn, &cr_tab[at[0]], &cr_tab[at[1]], want[1] == CR_BANK_NOISE);
     cr_unlock();
 }
-static void cr_ubank_load(uint32_t u)
+/* ---- presets: 0..63 the factory's (in the firmware), 64..191 the user's (in flash) ---- */
+static int cr_is_user(uint32_t slot) { return slot >= CR_NFACTORY && slot < CR_NPRESET; }
+static const uint8_t *cr_user_rec(uint32_t slot)   /* its 128 bytes in flash */
 {
-    int n = plat_store_load(u ? OBJ_MOTION : OBJ_SONG, &cr_ub[u], sizeof cr_ub[u]);
-    if (n != (int)sizeof cr_ub[u] || cr_ub[u].magic != CR_UBANK_MAGIC)
-        cr_ub[u].magic = 0;
-    cr_ub[u].name[sizeof cr_ub[u].name - 1u] = 0;
+    return cr_flash_ptr(CR_FL_PRESETS + (slot - CR_NFACTORY) * CR_PATCH_BYTES);
 }
-
-/* --------------------------------------------------------------------------------------------- presets --- */
-static uint32_t cr_obj_of(uint32_t slot) { return slot < 32u ? OBJ_PAT0 : OBJ_PAT1; }
-/* preset slot n as it is now: the saved one, else the factory one */
+static int cr_preset_saved(uint32_t slot)          /* a user slot holds a patch */
+{
+    const uint8_t *r;
+    if (!cr_is_user(slot))
+        return 1;
+    r = cr_user_rec(slot);
+    return r[109] == CR_PATCH_MAGIC && r[110] == CR_PATCH_VER;
+}
+/* preset slot n as it is now (an empty user slot: INIT) */
 static void cr_preset_read(uint32_t slot, cr_patch_t *out)
 {
-    int n = plat_store_load(cr_obj_of(slot), cr_obj, sizeof cr_obj);
-    uint32_t off = (slot % 32u) * CR_PATCH_BYTES, i;
-    if (n >= (int)(off + CR_PATCH_BYTES)) {
+    uint32_t i;
+    slot %= CR_NPRESET;
+    if (cr_is_user(slot)) {
+        const uint8_t *r = cr_user_rec(slot);
         for (i = 0; i < CR_PATCH_BYTES; i++)
-            ((uint8_t *)out)[i] = cr_obj[off + i];
+            ((uint8_t *)out)[i] = r[i];
         if (cr_patch_check(out) == 0)
             return;
+        cr_patch_init(out, "INIT");
+        return;
     }
     for (i = 0; i < CR_PATCH_BYTES; i++)
-        ((uint8_t *)out)[i] = CR_FACTORY[slot % CR_NPRESET][i];
+        ((uint8_t *)out)[i] = CR_FACTORY[slot][i];
     (void)cr_patch_check(out);
 }
-static int cr_preset_saved(uint32_t slot)
+/* a sector of the user area rewritten with n bytes changed at off (read, changed, erased, written) */
+static int cr_flash_change(uint32_t off, const void *src, uint32_t n)
 {
-    int n = plat_store_load(cr_obj_of(slot), cr_obj, sizeof cr_obj);
-    uint32_t off = (slot % 32u) * CR_PATCH_BYTES;
-    return n >= (int)(off + CR_PATCH_BYTES) && cr_obj[off + 77u] == CR_PATCH_MAGIC;
+    uint32_t sec = off & ~(CR_SECTOR - 1u), i;
+    const uint8_t *cur = cr_flash_ptr(sec);
+    for (i = 0; i < CR_SECTOR; i++)
+        cr_sec[i] = cur[i];
+    for (i = 0; i < n; i++)
+        cr_sec[off - sec + i] = src ? ((const uint8_t *)src)[i] : 0xFFu;
+    if (cr_flash_erase(sec))
+        return -1;
+    return cr_flash_write(sec, cr_sec, CR_SECTOR);
 }
-/* slot n's bytes written (or, with p 0, cleared back to the factory preset) */
+/* user slot n written (or, with p 0, emptied) */
 static int cr_preset_write(uint32_t slot, const cr_patch_t *p)
 {
-    int n = plat_store_load(cr_obj_of(slot), cr_obj, sizeof cr_obj);
-    uint32_t off = (slot % 32u) * CR_PATCH_BYTES, i;
-    for (i = n < 0 ? 0u : (uint32_t)n; i < 32u * CR_PATCH_BYTES; i++)
-        cr_obj[i] = 0;
-    for (i = 0; i < CR_PATCH_BYTES; i++)
-        cr_obj[off + i] = p ? ((const uint8_t *)p)[i] : 0u;
-    return plat_store_save(cr_obj_of(slot), cr_obj, 32u * CR_PATCH_BYTES);
+    if (!cr_is_user(slot))
+        return -1;
+    return cr_flash_change(CR_FL_PRESETS + (slot - CR_NFACTORY) * CR_PATCH_BYTES, p, CR_PATCH_BYTES);
+}
+static int cr_ubank_write(uint32_t u, const cr_ubank_t *b)
+{
+    if (u >= CR_NUBANK)
+        return -1;
+    return cr_flash_change(CR_FL_BANKS + u * CR_SECTOR, b, sizeof *b);
 }
 static void cr_globals_save(void) { (void)plat_store_save(OBJ_SOUND, &cr_g, sizeof cr_g); }
+static void cr_preset_label(uint32_t slot, char *b)   /* "3-1" (factory), "U12-8" (user) */
+{
+    uint32_t k = 0, bank;
+    slot %= CR_NPRESET;
+    if (cr_is_user(slot)) {
+        b[k++] = 'U';
+        slot -= CR_NFACTORY;
+    }
+    bank = slot / 8u + 1u;
+    if (bank >= 10u)
+        b[k++] = (char)('0' + bank / 10u);
+    b[k++] = (char)('0' + bank % 10u);
+    b[k++] = '-';
+    b[k++] = (char)('1' + slot % 8u);
+    b[k] = 0;
+}
+
+/* 0.1-0.3 kept their presets (over the factory slots) and two user banks in the store: on the first start of 0.4
+ * they become user presets U1-1.. and user banks 1 and 2 (once; the store keeps them, untouched) */
+#define CR_MIGRATED 0x01u
+static void cr_migrate(void)
+{
+    static cr_patch_t t;
+    uint32_t o, i, n = 0;
+    int len;
+    if (cr_g.pad[0] & CR_MIGRATED)
+        return;
+    for (o = 0; o < 2u; o++) {
+        static uint8_t obj[PLAT_STORE_MAX] X0X_POOL;
+        len = plat_store_load(o ? OBJ_PAT1 : OBJ_PAT0, obj, sizeof obj);
+        for (i = 0; len > 0 && i < 32u && (i + 1u) * CR_PATCH_V1_BYTES <= (uint32_t)len; i++)
+            if (cr_patch_from_v1(obj + i * CR_PATCH_V1_BYTES, &t) == 0 && n < CR_NUSER)
+                (void)cr_preset_write(CR_NFACTORY + n++, &t);
+    }
+    for (o = 0; o < 2u; o++) {
+        len = plat_store_load(o ? OBJ_MOTION : OBJ_SONG, &cr_ubw, sizeof cr_ubw);
+        if (len == (int)sizeof cr_ubw && cr_ubw.magic == CR_UBANK_MAGIC)
+            (void)cr_ubank_write(o, &cr_ubw);
+    }
+    cr_g.pad[0] |= CR_MIGRATED;
+    cr_globals_save();
+}
 
 static void cr_lat_clear(void);
-static void cr_evt(uint32_t kind)               /* tell the editor (live sync): F0 7D 46 4C 48 kind preset dirty F7 */
+static void cr_evt(uint32_t kind)   /* tell the editor (live sync): F0 7D 46 4C 48 kind preset(lo hi) dirty F7 */
 {
-    uint8_t ev[9] = {0xF0, 0x7D, 0x46, 0x4C, 48, 0, 0, 0, 0xF7};
+    uint8_t ev[10] = {0xF0, 0x7D, 0x46, 0x4C, 48, 0, 0, 0, 0, 0xF7};
     ev[5] = (uint8_t)(kind & 0x7Fu);
-    ev[6] = cr_g.cur;
-    ev[7] = cr_dirty;
+    ev[6] = (uint8_t)(cr_g.cur & 0x7Fu);
+    ev[7] = (uint8_t)(cr_g.cur >> 7);
+    ev[8] = cr_dirty;
     cr_wire(ev, sizeof ev);
 }
 /* a patch to the synth: every value; the banks follow from the main loop */
@@ -422,7 +496,7 @@ static void cr_ptext(uint32_t p, char *b, int lng)
         case G_LOCAL: cr_cpy(b, cr_g.local ? "ON" : "OFF"); break;
         case G_BREATH: cr_cpy(b, cr_g.breath == 0 ? "OFF" : cr_g.breath == 1 ? "MODW" : cr_g.breath == 2 ? "AFTT" : "EXPR"); break;
         case G_ARPOUT: cr_cpy(b, cr_g.arp_out ? "ARP" : "KEYS"); break;
-        case G_SLOT: b[0] = (char)('1' + cr_save_slot / 8u); b[1] = '-'; b[2] = (char)('1' + cr_save_slot % 8u); b[3] = 0; break;
+        case G_SLOT: cr_preset_label(cr_save_slot, b); break;
         case G_CPOS: cr_num(b, (int32_t)cr_cpos + 1, 0); break;
         case G_THEME: cr_cpy(b, CR_THEMES[cr_g.theme % CR_NTHEME].name); if (!lng) b[5] = 0; break;
         case G_CHAR: b[0] = cr_p.name[cr_cpos] ? cr_p.name[cr_cpos] : '_'; b[1] = 0; if (b[0] == ' ') cr_cpy(b, "SPC"); break;
@@ -443,11 +517,15 @@ static void cr_ptext(uint32_t p, char *b, int lng)
         uint32_t bk = cr_bank_of(v, p == CR_W2BANK);
         if (lng) {
             cr_cpy(b, CR_BANK_NAME[bk]);
-            if (bk >= CR_NBANK && cr_ub[bk - CR_NBANK].magic == CR_UBANK_MAGIC && cr_ub[bk - CR_NBANK].name[0]) {
-                cr_cat(b, " ");
-                cr_cat(b, cr_ub[bk - CR_NBANK].name);
-                b[22] = 0;
-            }
+            if (bk >= CR_NBANK && cr_ubank(bk - CR_NBANK) && cr_ubank(bk - CR_NBANK)->name[0]) {
+                char nm[14];
+                uint32_t q;
+                for (q = 0; q < 13u && cr_ubank(bk - CR_NBANK)->name[q]; q++)
+                    nm[q] = cr_ubank(bk - CR_NBANK)->name[q];
+                nm[q] = 0;
+                cr_cpy(b, nm);                   /* a user bank: its name */
+            } else if (bk >= CR_NBANK)
+                cr_cat(b, " (EMPTY)");
         } else if (bk >= CR_NBANK) {
             cr_cpy(b, "U");
             cr_num(b + 1, (int32_t)(bk - CR_NBANK + 1u), 0);
@@ -537,6 +615,23 @@ static void cr_ptext(uint32_t p, char *b, int lng)
     case CR_K_TEMPO: cr_num(b, 40 + 2 * (int32_t)v, 0); if (lng) cr_cat(b, " BPM"); break;
     case CR_K_ARPRATE: cr_cpy(b, CR_ARPRATE_NAME[(v * 6u) >> 7]); break;
     case CR_K_DEST: cr_cpy(b, CR_DEST_NAME[v % CR_ND]); break;
+    case CR_K_BMODE: {
+        static const char *const SH[5] = {"FM", "PM", "SYNC", "RING", "FOLD"};
+        cr_cpy(b, lng ? CR_BMODE_NAME[cr_band(v, 5)] : SH[cr_band(v, 5)]);
+        break;
+    }
+    case CR_K_FTYPE: {
+        static const char *const SH[12] = {"SVF", "LADR", "MS20", "303", "SEM", "STNR", "POLI", "FORM", "COMB",
+                                           "PHAS", "DUAL", "DECIM"};
+        cr_cpy(b, lng ? CR_FTYPE_NAME[cr_band(v, 12)] : SH[cr_band(v, 12)]);
+        break;
+    }
+    case CR_K_VMODE: cr_cpy(b, CR_VMODE_NAME[cr_band(v, 6)]); break;
+    case CR_K_ERA: {
+        static const char *const SH[6] = {"OFF", "SP12", "MPC", "S950", "S1K", "AMIGA"};
+        cr_cpy(b, lng ? CR_ERA_NAME[cr_band(v, 6)] : SH[cr_band(v, 6)]);
+        break;
+    }
     default: cr_num(b, (int32_t)v, 0); break;
     }
 }
@@ -609,6 +704,10 @@ static uint32_t cr_step(uint32_t p, uint32_t v, int32_t d)
         return (uint32_t)t;
     }
     case CR_K_ARPRATE: return (uint32_t)lim32((int32_t)((v * 6u) >> 7) + d, 0, 5) * 128u / 6u + 10u;
+    case CR_K_BMODE: return cr_band_val((uint32_t)lim32((int32_t)cr_band(v, 5) + d, 0, 4), 5);
+    case CR_K_FTYPE: return cr_band_val((uint32_t)lim32((int32_t)cr_band(v, 12) + d, 0, 11), 12);
+    case CR_K_VMODE: return cr_band_val((uint32_t)lim32((int32_t)cr_band(v, 6) + d, 0, 5), 6);
+    case CR_K_ERA: return cr_band_val((uint32_t)lim32((int32_t)cr_band(v, 6) + d, 0, 5), 6);
     case CR_K_LRATE1:
         if (cr_p.p[CR_L1SYNC] >= 64u)
             return (uint32_t)lim32((int32_t)((v * 16u) >> 7) + d, 0, 15) * 8u + 4u;
@@ -654,7 +753,7 @@ static void cr_gturn(uint32_t p, int32_t d)
     case G_BREATH: cr_g.breath = (uint8_t)lim32(cr_g.breath + d, 0, 3); break;
     case G_ARPOUT: cr_g.arp_out = d > 0; break;
     case G_THEME: cr_g.theme = (uint8_t)lim32(cr_g.theme + d, 0, CR_NTHEME - 1); break;
-    case G_SLOT: cr_save_slot = (uint32_t)lim32((int32_t)cr_save_slot + d, 0, CR_NPRESET - 1); break;
+    case G_SLOT: cr_save_slot = (uint32_t)lim32((int32_t)cr_save_slot + d, CR_NFACTORY, CR_NPRESET - 1); break;
     case G_CPOS: cr_cpos = (uint32_t)lim32((int32_t)cr_cpos + d, 0, 10); break;
     case G_CHAR: {
         static const char cs[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+/#&";
@@ -693,7 +792,7 @@ static int cr_dest_of_param(uint32_t p)
     static const uint8_t DP[CR_ND] = {0xFF, CR_W1POS, CR_W2POS, CR_MIX, 0xFF, CR_TUNE, CR_OMAMT, CR_L1RATE,
         CR_L2RATE, CR_L1SHAPE, CR_L2SHAPE, CR_CUT, CR_RES, CR_MORPH, CR_FEGAMT, CR_FA, CR_FD, CR_FS, CR_FR,
         CR_AEGAMT, CR_AA, CR_AD, CR_AS, CR_AR, CR_VOL, CR_MA, CR_MD, CR_MS, CR_MR, CR_DIST, CR_DMIX, CR_DTIME,
-        CR_DFB, CR_SPREAD, CR_GLIDE, 0xFF, 0xFF, 0xFF};
+        CR_DFB, CR_SPREAD, CR_GLIDE, 0xFF, 0xFF, 0xFF, CR_BAMT, CR_VMIX, CR_CHMIX, CR_PHMIX, CR_CRUSH, CR_OTT};
     if (p == CR_OCT)
         return CR_D_PITCH;
     if (p == CR_FINE)
@@ -739,12 +838,16 @@ static void cr_cycle(uint32_t a, uint32_t b, uint32_t c)
 static void cr_button(uint32_t b)                /* a press (LFO, SEL, ENV: a release without a knob turned) */
 {
     switch (b) {
-    case B_HOME: cr_cycle(PG_OSC, PG_WAVES, PG_TUNE); break;
+    case B_HOME:                                 /* OSC -> WAVES -> OSC B -> TUNE */
+        cr_go(cr_page < PG_TUNE ? cr_page + 1u : PG_OSC);
+        break;
     case B_EDIT: cr_go(PG_FILTER); break;
     case B_ENV: cr_cycle(PG_FEG, PG_AEG, PG_MEG); break;
     case B_LFO: cr_cycle(PG_LFO1, PG_LFO2, PG_LFO2); break;
     case B_SEL: cr_go(PG_MATRIX); break;
-    case B_FX: cr_cycle(PG_FX, PG_OUT, PG_OUT); break;
+    case B_FX:                                   /* FX -> OUTPUT -> REVERB -> REVERB 2 -> MOD FX -> CRUSH */
+        cr_go(cr_page >= PG_FX && cr_page < PG_CRUSH ? cr_page + 1u : PG_FX);
+        break;
     case B_GLO: cr_cycle(PG_GLOB, PG_GLOB2, PG_GLOB3); break;
     case B_ARP:
         if (cr_page != PG_ARP)
@@ -773,7 +876,11 @@ static void cr_button(uint32_t b)                /* a press (LFO, SEL, ENV: a re
         break;
     case B_SAVE:
         if (cr_page != PG_SAVE) {
-            cr_save_slot = cr_g.cur;
+            cr_save_slot = cr_g.cur;             /* a user preset saves over itself; a factory one into a free slot */
+            if (!cr_is_user(cr_save_slot)) {
+                for (cr_save_slot = CR_NFACTORY; cr_save_slot < CR_NPRESET - 1u && cr_preset_saved(cr_save_slot); cr_save_slot++)
+                    ;
+            }
             cr_cpos = 0;
             cr_go(PG_SAVE);
         } else {
@@ -933,6 +1040,13 @@ void cr_app_input(void)
         cr_msg[0] = 0;
         cr_touch();
     }
+    {
+        static uint32_t cpu_t;
+        if (cr_page == PG_GLOB3 && now - cpu_t > 500u) {   /* the load, twice a second */
+            cpu_t = now;
+            cr_touch();
+        }
+    }
     if (cr_clock_seen && now - cr_clock_ms > 500u)
         cr_clock_seen = 0;
     {   /* the lights */
@@ -949,7 +1063,7 @@ void cr_app_input(void)
         if (cr_page >= PG_FEG && cr_page <= PG_MEG) lit |= 1u << B_ENV;
         if (cr_page == PG_LFO1 || cr_page == PG_LFO2) lit |= 1u << B_LFO;
         if (cr_page == PG_MATRIX) lit |= 1u << B_SEL;
-        if (cr_page == PG_FX || cr_page == PG_OUT) lit |= 1u << B_FX;
+        if (cr_page >= PG_FX && cr_page <= PG_CRUSH) lit |= 1u << B_FX;
         if (cr_page == PG_SEQ || cr_p.steps) lit |= 1u << B_SEQ;
         if (cr_page >= PG_GLOB && cr_page <= PG_GLOB3) lit |= 1u << B_GLO;
         if (cr_page == PG_SAVE) lit |= 1u << B_SAVE;
@@ -1209,17 +1323,17 @@ static void cr_screen(void)
     /* ---- the top bar: the preset in a box, the page ---- */
     sx_rect(0, 0, 240, 32, t->bar);
     sx_round(3, 3, 150, 26, t->panel);
-    b[0] = (char)('1' + cr_g.cur / 8u);
-    b[1] = '-';
-    b[2] = (char)('1' + cr_g.cur % 8u);
-    b[3] = 0;
+    cr_preset_label(cr_g.cur, b);
     sx_text(8, 5, &FONT_M, b, t->acc);
     for (i = 0; i < 11u && cr_p.name[i]; i++)
         s2[i] = cr_p.name[i];
     s2[i] = 0;
     if (cr_dirty)
         cr_cat(s2, "*");
-    sx_text(44, 5, cr_fit(s2, 106), s2, t->ink);
+    {
+        int32_t x = 12 + text_w(&FONT_M, b);
+        sx_text(x, 5, cr_fit(s2, 150 - x), s2, t->ink);
+    }
     sx_center(156, 84, 9, text_w(&FONT_B, CR_PG_NAME[cr_page]) <= 82 ? &FONT_B : &FONT_S, CR_PG_NAME[cr_page], t->ink);
     /* ---- the middle (34..148) ---- */
     if (cr_msg[0]) {
@@ -1264,8 +1378,12 @@ static void cr_screen(void)
                 cr_num(b, (int32_t)cr_p.p[CR_DEP0 + sl] - 64, 1);
                 sx_text(160, 96, &FONT_M, b, t->acc);
             }
-        } else if (cr_page == PG_FILTER)
+        } else if (cr_page == PG_FILTER) {
+            const char *fn = CR_FTYPE_NAME[cr_band(cr_p.p[CR_FTYPE], 12u)];
             cr_draw_filter(12, 44, 216, 94);
+            sx_rect(14, 46, text_w(&FONT_M, fn) + 8, 22, t->panel);
+            sx_text(18, 48, &FONT_M, fn, t->ink);
+        }
         else if (cr_page == PG_MATRIX) {
             sx_center(4, 232, 48, &FONT_M, CR_SRC_NAME[cr_msrc], t->acc);
             sx_center(4, 232, 76, &FONT_S, "TO", t->soft);
@@ -1281,8 +1399,14 @@ static void cr_screen(void)
                 } else
                     sx_round(x, y, 26, 40, i < cr_p.steps ? t->line : t->track);
             }
+        } else if (cr_page == PG_GLOB3) {        /* the audio's load, to see how far the effects go */
+            cr_cpy(b, "CPU ");
+            cr_num(b + 4, (int32_t)plat_cpu_pct(), 0);
+            cr_cat(b, "%");
+            sx_center(4, 232, 46, &FONT_M, "AUDIO LOAD", t->soft);
+            sx_center(4, 232, 80, &FONT_XL, b, t->ink);
         } else if (cr_page == PG_SAVE) {
-            sx_center(4, 232, 44, &FONT_S, cr_preset_saved(cr_save_slot) ? "OVERWRITES YOUR PRESET" : "OVER THE FACTORY PRESET", t->soft);
+            sx_center(4, 232, 44, &FONT_S, cr_preset_saved(cr_save_slot) ? "OVERWRITES THIS PRESET" : "INTO AN EMPTY SLOT", t->soft);
             for (i = 0; i < 11u; i++) {
                 int32_t x = 10 + (int32_t)i * 20;
                 char c[2] = {cr_p.name[i] ? cr_p.name[i] : ' ', 0};
@@ -1394,7 +1518,7 @@ void cr_app_midi(uint8_t st, uint8_t d1, uint8_t d2)
         cr_synth_ctl(&cr_syn, CR_S_AFTT, (float)d1 / 127.f);
         break;
     case 0xC0u:
-        cr_want_preset = (int16_t)(d1 % CR_NPRESET);
+        cr_want_preset = (int16_t)(d1 & 0x7Fu);   /* 0-63 the factory presets, 64-127 U1-1 .. U8-8 */
         break;
     case 0xB0u:
         if (d1 == 1u)
@@ -1471,12 +1595,12 @@ void cr_app_panic(void)
 void cr_app_init(void)
 {
     uint32_t u;
-    cr_synth_init(&cr_syn, cr_dly);
+    cr_synth_init(&cr_syn, cr_mem);
     cr_arp_init(&cr_arp, &cr_arp_out);
     if (plat_store_load(OBJ_SOUND, &cr_g, sizeof cr_g) != (int)sizeof cr_g || cr_globals_check(&cr_g))
         cr_globals_init(&cr_g);
-    for (u = 0; u < CR_NUBANK; u++)
-        cr_ubank_load(u);
+    (void)u;
+    cr_migrate();
     cr_load(cr_g.cur);
     cr_tables();
     cr_want_tables = 0;

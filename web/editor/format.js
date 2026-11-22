@@ -13,13 +13,13 @@ const ARPRATE = ["1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"];
 export const PI = Object.fromEntries(M.params.map((p) => [p.key, p.id]));
 
 export function bankOf(v, wave2) {
-  const n = wave2 ? 11 : 10;
+  const n = wave2 ? 41 : 40;
   let b = Math.floor((v * n) / 128);
   if (!wave2 && b >= 8) b++;
   return b;
 }
 export function bankVal(b, wave2) {
-  const n = wave2 ? 11 : 10;
+  const n = wave2 ? 41 : 40;
   const i = !wave2 && b > 8 ? b - 1 : b;
   return Math.floor((i * 128 + 64) / n);
 }
@@ -27,6 +27,13 @@ export function semiOf(v) {
   const d = v - 64;
   return d >= 0 ? Math.floor((d * 48 + 31) / 63) : -Math.floor((-d * 48 + 31) / 64);
 }
+export const band = (v, n) => (v * n) >> 7;
+export const bandVal = (i, n) => Math.floor((i * 128 + 64) / n);
+const BMODE = ["FM FROM A", "PM FROM A", "SYNC TO A", "RING WITH A", "WAVEFOLD"];
+const FTYPE = ["SVF", "LADDER", "MS-20", "TB-303", "SEM", "STEINER", "POLIVOKS", "FORMANT", "COMB +/-", "PHASER", "DUAL PEAK", "DECIMATOR"];
+const VMODE = ["ROOM", "HALL", "HALO", "SWELL", "ABYSS", "DUB"];
+const ERA = ["OFF", "SP-1200", "MPC60", "S950", "S1000", "AMIGA"];
+export const LISTS = { BMODE, FTYPE, VMODE, ERA };
 export function spreadShape(v) { return v < 64 ? 0 : Math.min(9, Math.floor((v - 64) / 7) + 1); }
 
 /* the choices a list-like parameter has: [value, label] (the middle of each band, as the firmware steps) */
@@ -41,6 +48,10 @@ export function choices(p) {
     case "ONOFF": return [[0, "OFF"], [127, "ON"]];
     case "DEST": return M.dests.map((n, i) => [i, n]);
     case "ARPRATE": return ARPRATE.map((n, i) => [Math.floor((i * 128) / 6) + 10, n]);
+    case "BMODE": case "FTYPE": case "VMODE": case "ERA": {
+      const l = LISTS[p.kind];
+      return l.map((n, i) => [bandVal(i, l.length), n]);
+    }
     case "OCT": return [-2, -1, 0, 1, 2, 3, 4].map((o) => [Math.floor(((o + 2) * 128 + 64) / 7), (o > 0 ? "+" : "") + o]);
     default: return null;
   }
@@ -81,6 +92,7 @@ export function fmt(p, v, patch) {
     case "TEMPO": return `${40 + 2 * v} BPM`;
     case "ARPRATE": return ARPRATE[(v * 6) >> 7];
     case "DEST": return M.dests[v] || "NONE";
+    case "BMODE": case "FTYPE": case "VMODE": case "ERA": { const l = LISTS[p.kind]; return l[band(v, l.length)]; }
     default: return String(v);
   }
 }

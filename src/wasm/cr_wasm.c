@@ -27,7 +27,7 @@ void *memset(void *d, int c, unsigned long n)
 
 static cr_synth_t S;
 static cr_arp_t A;
-static int16_t DLY[CR_DLY_LEN];
+static int16_t DLY[CR_SYN_MEM];
 static cr_wtbank_t T[2];
 static cr_patch_t P;
 static int16_t UB[CR_NUBANK][5][CR_WT_N];

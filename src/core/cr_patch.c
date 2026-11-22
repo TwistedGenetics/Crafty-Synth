@@ -67,20 +67,51 @@ const cr_pinfo_t CR_P[CR_NP] = {
     [CR_ARP] = {58, CR_K_ONOFF, 0, "ARP"},
     [CR_TEMPO] = {3, CR_K_TEMPO, 40, "TEMPO"},       /* 40 + 2 x value: 40..294 BPM (default 120) */
     [CR_ARPRATE] = {9, CR_K_ARPRATE, 64, "RATE"},
+    /* 0.4 (free CC numbers: the CRAFTsynth's chart has none of these) */
+    [CR_BMODE] = {59, CR_K_BMODE, 0, "B MODE"},
+    [CR_BAMT] = {60, CR_K_NUM, 0, "B MOD"},
+    [CR_FTYPE] = {61, CR_K_FTYPE, 0, "TYPE"},
+    [CR_VMODE] = {62, CR_K_VMODE, 32, "MODE"},
+    [CR_VSIZE] = {63, CR_K_NUM, 80, "SIZE"},
+    [CR_VDECAY] = {70, CR_K_PCT, 80, "DECAY"},
+    [CR_VMIX] = {71, CR_K_PCT, 0, "REVERB"},
+    [CR_VWARP] = {72, CR_K_PCT, 90, "WARP"},
+    [CR_VDENS] = {74, CR_K_PCT, 90, "DENSITY"},
+    [CR_VMOD] = {75, CR_K_PCT, 40, "MOD"},
+    [CR_CHMIX] = {76, CR_K_PCT, 0, "CHORUS"},
+    [CR_CHRATE] = {77, CR_K_NUM, 40, "CH RATE"},
+    [CR_PHMIX] = {78, CR_K_PCT, 0, "PHASER"},
+    [CR_PHRATE] = {80, CR_K_NUM, 40, "PH RATE"},
+    [CR_ERA] = {81, CR_K_ERA, 0, "ERA"},
+    [CR_CRUSH] = {82, CR_K_PCT, 60, "CRUSH"},
+    [CR_OTT] = {83, CR_K_PCT, 0, "OTT"},
 };
+
+const char *const CR_BMODE_NAME[5] = {"FM FROM A", "PM FROM A", "SYNC TO A", "RING WITH A", "WAVEFOLD"};
+const char *const CR_FTYPE_NAME[12] = {"SVF", "LADDER", "MS-20", "TB-303", "SEM", "STEINER", "POLIVOKS",
+                                       "FORMANT", "COMB +/-", "PHASER", "DUAL PEAK", "DECIMATOR"};
+const char *const CR_VMODE_NAME[6] = {"ROOM", "HALL", "HALO", "SWELL", "ABYSS", "DUB"};
+const char *const CR_ERA_NAME[6] = {"OFF", "SP-1200", "MPC60", "S950", "S1000", "AMIGA"};
+
+uint32_t cr_band(uint32_t v, uint32_t n) { return ((v & 0x7Fu) * n) >> 7; }
+uint32_t cr_band_val(uint32_t i, uint32_t n) { return i >= n ? 127u : (i * 128u + 64u) / n; }
 
 const char *const CR_DEST_NAME[CR_ND] = {
     "NONE", "WAVE 1", "WAVE 2", "MIX", "PITCH", "OSC2 PCH", "OSC MOD", "L1 RATE", "L2 RATE", "L1 SHAPE",
     "L2 SHAPE", "CUTOFF", "RESO", "MORPH", "FEG AMT", "FEG A", "FEG D", "FEG S", "FEG R", "AEG AMT", "AEG A",
     "AEG D", "AEG S", "AEG R", "VOLUME", "MEG A", "MEG D", "MEG S", "MEG R", "DISTORT", "DELAY", "DLY TIME",
-    "DLY FB", "SPREAD", "GLIDE", "L1 DEPTH", "L2 DEPTH", "MEG DEP"};
+    "DLY FB", "SPREAD", "GLIDE", "L1 DEPTH", "L2 DEPTH", "MEG DEP", "B MOD", "REVERB", "CHORUS", "PHASER", "CRUSH",
+    "OTT"};
 const char *const CR_SRC_NAME[CR_NSRC] = {"LFO 1", "LFO 2", "MOD EG", "NOTE", "VELO", "MOD WHL", "EXPR", "AFTTCH"};
 const char *const CR_OM_NAME[CR_NOM] = {
     "PHASE MOD", "WINDOW SYNC", "RING MOD", "TRI FOLD", "DE-REZ", "RISE/RUN", "GLITCH SINE", "WINDOW AMP",
     "FREQ MOD", "HARD SYNC", "MIN MOD", "SINE FOLD", "BIT CRUSH", "SCRUNCH", "LO-FI PHASE", "VOCAL SYNC"};
 const char *const CR_BANK_NAME[CR_BANKS] = {
     "ANALOGUE", "DIGITAL 1", "MATH", "POLYGON", "CURATED 1", "FORMANT", "DIGITAL 2", "CURATED 2", "SINE/NOISE",
-    "USER 1", "USER 2"};
+    "USER 1", "USER 2", "USER 3", "USER 4", "USER 5", "USER 6", "USER 7", "USER 8",
+    "USER 9", "USER 10", "USER 11", "USER 12", "USER 13", "USER 14", "USER 15", "USER 16",
+    "USER 17", "USER 18", "USER 19", "USER 20", "USER 21", "USER 22", "USER 23", "USER 24",
+    "USER 25", "USER 26", "USER 27", "USER 28", "USER 29", "USER 30", "USER 31", "USER 32"};
 const char *const CR_SHAPE_NAME[10] = {"UNISON", "MAJOR", "MINOR", "MAJ 6TH", "SUS 4TH", "5THS", "5TH+OCT",
                                        "OCT +1+2", "OCT +1-1", "OCT -1-2"};
 
@@ -127,13 +158,30 @@ void cr_patch_init(cr_patch_t *p, const char *name)
     for (i = 0; i < CR_NP; i++)
         p->p[i] = CR_P[i].def;
     p->magic = CR_PATCH_MAGIC;
-    p->ver = 1;
+    p->ver = CR_PATCH_VER;
+}
+
+int cr_patch_from_v1(const uint8_t v1[CR_PATCH_V1_BYTES], cr_patch_t *out)
+{
+    uint32_t i;
+    if (v1[77] != CR_PATCH_MAGIC || v1[78] != 1u)
+        return -1;
+    cr_patch_init(out, 0);
+    for (i = 0; i < 12u; i++)
+        out->name[i] = (char)v1[i];
+    for (i = 0; i <= CR_ARPRATE; i++)  /* the 62 parameters it had; the new ones keep their defaults */
+        out->p[i] = v1[12u + i];
+    out->steps = v1[76];
+    out->pad = v1[79];
+    for (i = 0; i < CR_NSTEP; i++)
+        out->step[i] = v1[80u + i];
+    return cr_patch_check(out);
 }
 
 int cr_patch_check(cr_patch_t *p)
 {
     uint32_t i;
-    if (p->magic != CR_PATCH_MAGIC)
+    if (p->magic != CR_PATCH_MAGIC || p->ver != CR_PATCH_VER)
         return -1;
     p->name[sizeof p->name - 1u] = 0;
     for (i = 0; i < sizeof p->name - 1u; i++)

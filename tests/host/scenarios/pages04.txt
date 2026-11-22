@@ -1,0 +1,53 @@
+# Crafty Synth 0.4: the new pages (OSC B, filter type, reverb, mod FX, crush), the load, saving to a user slot
+wait 300
+tap HOME
+tap HOME
+expect page 2
+turn K1 1
+turn K2 40
+wait 1600
+shot p_oscb.ppm
+tap EDIT
+expect page 4
+turn K4 7
+expect param.64 80
+wait 1600
+shot p_filter.ppm
+tap FX
+tap FX
+tap FX
+expect page 13
+turn K4 50
+expect param.68 50
+wait 1600
+shot p_reverb.ppm
+tap FX
+tap FX
+expect page 15
+turn K1 60
+wait 1600
+shot p_modfx.ppm
+tap FX
+expect page 16
+turn K1 1
+expect param.76 32
+wait 1600
+shot p_crush.ppm
+key 0 down
+wait 300
+expect peak >1000
+key 0 up
+tap GLO
+tap GLO
+tap GLO
+expect page 21
+wait 600
+shot p_cpu.ppm
+tap SAVE
+expect page 22
+shot p_save.ppm
+tap SAVE
+expect preset 64
+expect page 0
+wait 1600
+shot p_saved.ppm

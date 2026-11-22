@@ -2,7 +2,7 @@
 // Crafty Synth editor: the panels (after Serum 2 and Shrub, in the FM-1's themes), the preview (the firmware's engine
 // in WebAssembly), the FM-1 over Web MIDI, user wavetables from WAV files. Copyright (C) 2026 Jamie (TwistedGenetics).
 import M from "./meta.js";
-import { fmt, choices, PI, bankOf } from "./format.js";
+import { fmt, choices, PI, bankOf, band, bandVal, LISTS } from "./format.js";
 import { Device } from "./device.js";
 import { parseWav, makeBank, defaultPicks, bankBytes, N, PEAK } from "./serum.js";
 
@@ -40,7 +40,8 @@ const rgba = (hex, a) => {
 };
 
 /* ---------------------------------------------------------------------------------------------- state --- */
-const patch = new Uint8Array(96);     // name[12], p[64], steps, magic, ver, root, step[16]
+const patch = new Uint8Array(128);    // cr_patch_t v2: name[12], p[96], steps, magic, ver, root, step[16]
+const O_STEPS = 108, O_MAGIC = 109, O_VER = 110, O_ROOT = 111, O_STEP = 112;
 const P = (k) => patch[12 + PI[k]];
 const ubank = [null, null];
 let cur = 0;
@@ -212,7 +213,7 @@ function knob(key, label, color = "acc") {
     g.fillStyle = T.panel; g.beginPath(); g.arc(cx, cy, r - 7, 0, 2 * Math.PI); g.fill();
     g.strokeStyle = T.ink; g.lineWidth = 2.5; g.beginPath();
     g.moveTo(cx + Math.cos(av) * 4, cy + Math.sin(av) * 4); g.lineTo(cx + Math.cos(av) * (r - 9), cy + Math.sin(av) * (r - 9)); g.stroke();
-    const t = fmt(p, patch[12 + p.id], patch.subarray(12, 76)).replace("ALWAYS ", "A ").replace("LEGATO ", "L ").replace("UNISON ", "UNI ").replace(" cents", "c").replace(" semi", " st");
+    const t = fmt(p, patch[12 + p.id], patch.subarray(12, 108)).replace("ALWAYS ", "A ").replace("LEGATO ", "L ").replace("UNISON ", "UNI ").replace(" cents", "c").replace(" semi", " st");
     k.val.textContent = t;
     k.val.style.fontSize = t.length > 9 ? "15px" : t.length > 6 ? "17px" : "20px";
     k.el.title = `${p.name}: ${t} (CC ${p.cc}) · drag, wheel or arrows; shift: fine; double-click: default`;
@@ -239,7 +240,35 @@ function syncPick(pk) {
   else if (pk.p.kind === "LMODE") best = v < 42 ? 20 : v < 84 ? 63 : 105;
   else if (pk.p.kind === "ONOFF") best = v >= 64 ? 127 : 0;
   else if (pk.p.kind === "DEST") best = v;
+  else if (LISTS[pk.p.kind]) { const n = LISTS[pk.p.kind].length; best = bandVal(band(v, n), n); }
   pk.s.value = best;
+}
+
+/* ------------------------------------------------------------------------------------------- presets --- */
+// 0-63 the factory's (in meta.js too), 64-191 the user's (on the FM-1: their names come from it when connected)
+const userNames = new Array(128).fill(null);
+const label = (i) => (i < 64 ? `${(i >> 3) + 1}-${(i & 7) + 1}` : `U${((i - 64) >> 3) + 1}-${((i - 64) & 7) + 1}`);
+function buildPresetList() {
+  const sel = $("preset"), slot = $("slot");
+  sel.replaceChildren(); slot.replaceChildren();
+  const fg = el("optgroup", { label: "FACTORY" }), ug = el("optgroup", { label: "USER (on the FM-1)" });
+  M.presets.forEach((p, i) => fg.append(el("option", { value: i, textContent: `${label(i)}  ${p.name}` })));
+  for (let i = 64; i < 192; i++) {
+    const n = userNames[i - 64];
+    ug.append(el("option", { value: i, textContent: `${label(i)}  ${n || "-"}`, disabled: !dev.connected }));
+    slot.append(el("option", { value: i, textContent: `${label(i)}  ${n || "(empty)"}` }));
+  }
+  sel.append(fg, ug);
+  sel.value = cur;
+}
+async function readUserNames() {          // the user presets' names, from the FM-1 (a patch each)
+  for (let i = 0; i < 128; i++) {
+    try {
+      const r = await dev.getPatch(64 + i);
+      userNames[i] = r.saved ? String.fromCharCode(...r.bytes.slice(0, 12)).replace(/\0.*$/, "").trim() || "?" : null;
+    } catch (e) { break; }
+  }
+  buildPresetList();
 }
 
 /* ------------------------------------------------------------------------------------------ the panels --- */
@@ -274,14 +303,15 @@ function build() {
     views[`wt${w}`] = el("canvas", { class: "view" });
     const ks = el("div", { class: "knobs" });
     if (k === 1) ks.append(knob("W1POS", "WT POS"), knob("OMAMT"), pick("OMMODE"));
-    else ks.append(knob("W2POS", "WT POS", "acc2"), knob("TUNE", null, "acc2"), knob("FINE", null, "acc2"));
+    else ks.append(knob("W2POS", "WT POS", "acc2"), knob("TUNE", null, "acc2"), knob("FINE", null, "acc2"),
+      knob("BAMT", "B MOD", "acc2"), pick("BMODE", "B MODE"));
     rack.append(panel("osc", head(w, `OSC ${w}`, bankSel), views[`wt${w}`], ks));
   }
   rack.append(panel("voice", head(null, "VOICE"), el("div", { class: "knobs" }, knob("MIX"), knob("SPREAD"), knob("GLIDE"),
     pick("OCT", "OCTAVE"), knob("VOL"), knob("AEGAMT", "AMP EG"))));
   views.filter = el("canvas", { class: "view" });
   rack.append(panel("filter", head(null, "FILTER"), views.filter,
-    el("div", { class: "knobs" }, knob("CUT"), knob("RES"), knob("MORPH"), knob("FEGAMT", "FILT EG"))));
+    el("div", { class: "knobs" }, pick("FTYPE", "TYPE"), knob("CUT"), knob("RES"), knob("MORPH"), knob("FEGAMT", "FILT EG"))));
   views.env = el("canvas", { class: "view" });
   const ek = el("div", { class: "knobs" });
   ENV[envTab][1].forEach((key) => { ek.append(knob(key)); envKnobs.push(knobs[knobs.length - 1]); });
@@ -309,13 +339,17 @@ function build() {
     t.append(el("tr", {}, el("td", { textContent: s }), el("td", {}, sel), el("td", { class: "dep" }, r), el("td", { class: "dv", id: `mv${i}` })));
   });
   rack.append(panel("matrix", head(null, "MATRIX"), t));
-  rack.append(panel("fx", head(null, "FX"), el("div", { class: "knobs" }, knob("DIST", "DISTORT"), knob("DMIX", "DELAY"),
+  rack.append(panel("fx", head(null, "DRIVE + DELAY"), el("div", { class: "knobs" }, knob("DIST", "DISTORT"), knob("DMIX", "DELAY"),
     knob("DTIME"), knob("DFB"), pick("DSYNC", "DLY SYNC"))));
+  rack.append(panel("fx", head(null, "REVERB", el("small", { textContent: "Horizon, after Super-Massive" })), el("div", { class: "knobs" },
+    pick("VMODE", "MODE"), knob("VMIX", "REVERB"), knob("VSIZE", "SIZE"), knob("VDECAY", "DECAY"), knob("VWARP", "WARP"),
+    knob("VDENS", "DENSITY"), knob("VMOD", "MOD"))));
+  rack.append(panel("fx", head(null, "MOD FX"), el("div", { class: "knobs" }, knob("CHMIX", "CHORUS"), knob("CHRATE", "CH RATE"),
+    knob("PHMIX", "PHASER"), knob("PHRATE", "PH RATE"))));
+  rack.append(panel("fx", head(null, "CRUSH + OTT", el("small", { textContent: "EraCrush" })), el("div", { class: "knobs" },
+    pick("ERA"), knob("CRUSH"), knob("OTT"))));
   rack.append(panel("arp", head(null, "ARP-SEQ"), el("div", { class: "knobs" }, pick("ARP"), knob("TEMPO"), pick("ARPRATE", "RATE"))));
-  M.presets.forEach((p, i) => {
-    $("preset").append(el("option", { value: i, textContent: `${(i >> 3) + 1}-${(i & 7) + 1}  ${p.name}` }));
-    $("slot").append(el("option", { value: i, textContent: `${(i >> 3) + 1}-${(i & 7) + 1}` }));
-  });
+  buildPresetList();
   THEMES.forEach((th, i) => $("theme").append(el("option", { value: i, textContent: th.name })));
 }
 
@@ -344,14 +378,14 @@ function refresh() {
 function drawSteps() {
   const box = $("steps");
   box.replaceChildren();
-  for (let i = 0; i < patch[76]; i++) {
-    const s = patch[80 + i];
+  for (let i = 0; i < patch[O_STEPS]; i++) {
+    const s = patch[O_STEP + i];
     const b = el("button", { textContent: s === 0 ? "REST" : (s > 64 ? "+" : "") + (s - 64), class: s === 0 ? "rest" : "" });
     b.onclick = (e) => {
-      let v = patch[80 + i];
+      let v = patch[O_STEP + i];
       if (e.altKey) v = v === 0 ? 64 : 0;
       else if (v) v = Math.max(1, Math.min(127, v + (e.shiftKey ? -1 : 1)));
-      patch[80 + i] = v;
+      patch[O_STEP + i] = v;
       pushPatch();
     };
     box.append(b);
@@ -517,57 +551,76 @@ function buildKb() {
 }
 
 /* ------------------------------------------------------------------------------------ user wavetables --- */
+let ubankUsed = new Array(32).fill(false);
+function renderUbankSlots() {
+  const sel = $("ubslot");
+  if (!sel) return;
+  const v = sel.value || "0";
+  sel.replaceChildren();
+  for (let u = 0; u < 32; u++) sel.append(el("option", { value: u, textContent: `USER ${u + 1}${ubankUsed[u] ? " (used)" : ""}` }));
+  sel.value = v;
+}
 function buildUbanks() {
+  // one importer: a WAV in, five frames picked, sent to any of the 32 user banks (banks 10-41 on OSC A and B)
   const box = $("ubanks");
-  for (let u = 0; u < 2; u++) {
-    let table = null, picksU = [0, 0, 0, 0, 0];
-    const name = el("input", { type: "text", value: `USER ${u + 1}`, maxLength: 13 });
-    const file = el("input", { type: "file", accept: ".wav,audio/wav" });
-    const frames = el("div", { class: "frames" });
-    const info = el("span", { textContent: "No table loaded: bank 1 stands in.", class: "status" });
-    const send = el("button", { textContent: "SEND TO FM-1", disabled: true });
-    const view = el("canvas", { class: "view" });
-    const cvs = [], rng = [];
-    for (let k = 0; k < 5; k++) {
-      const c = el("canvas"), r = el("input", { type: "range", min: 0, max: 0, value: 0 }), lab = el("span", { textContent: `WAVE ${k + 1}` });
-      r.oninput = () => { picksU[k] = +r.value; lab.textContent = `WAVE ${k + 1}: FRAME ${picksU[k] + 1}`; update(); };
-      cvs.push(c); rng.push([r, lab]);
-      frames.append(el("div", {}, c, r, lab));
-    }
-    function update() {
-      if (!table) return;
-      ubank[u] = makeBank(table, picksU);
-      drawTable(view, 9 + u, 64, T.acc);
-      cvs.forEach((c, k) => {
-        const { g, w, h } = fitCanvas(c), d = ubank[u].subarray(k * N, (k + 1) * N), pts = [];
-        for (let x = 0; x <= w; x++) pts.push([x, h / 2 - (d[Math.min(N - 1, Math.floor((x / w) * N))] / PEAK) * h * 0.42]);
-        g.fillStyle = rgba(T.acc, 0.25); g.beginPath(); g.moveTo(0, h / 2);
-        for (const [x, y] of pts) g.lineTo(x, y);
-        g.lineTo(w, h / 2); g.fill();
-        g.strokeStyle = T.acc; g.lineWidth = 2; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
-      });
-      post({ t: "ubank", u, data: ubank[u] });
-      refresh();
-    }
-    file.onchange = async () => {
-      try {
-        table = parseWav(await file.files[0].arrayBuffer());
-        picksU = defaultPicks(table.frames);
-        rng.forEach(([r, lab], k) => { r.max = table.frames - 1; r.value = picksU[k]; lab.textContent = `WAVE ${k + 1}: FRAME ${picksU[k] + 1}`; });
-        name.value = file.files[0].name.replace(/\.wav$/i, "").toUpperCase().slice(0, 13);
-        info.textContent = `${table.frames} frame${table.frames > 1 ? "s" : ""} of ${table.frameSize} samples.`;
-        send.disabled = false;
-        update();
-      } catch (e) { info.textContent = e.message; }
-    };
-    send.onclick = async () => {
-      if (!dev.connected) return status("Connect the FM-1 first.");
-      try { status(`Sending USER ${u + 1}...`); await dev.putBank(u, bankBytes(name.value, ubank[u])); status(`USER ${u + 1} is on the FM-1.`); }
-      catch (e) { status(e.message); }
-    };
-    box.append(el("div", { class: "ubank" }, el("h2", {}, el("span", { class: "badge", textContent: `U${u + 1}` }), `USER ${u + 1}`),
-      el("div", { class: "row" }, file, name, send), view, frames, info));
+  let table = null, picksU = [0, 0, 0, 0, 0], data = null;
+  const name = el("input", { type: "text", value: "MY TABLE", maxLength: 13 });
+  const file = el("input", { type: "file", accept: ".wav,audio/wav" });
+  const slot = el("select", { id: "ubslot" });
+  const frames = el("div", { class: "frames" });
+  const info = el("span", { textContent: "Open a WAV wavetable (Serum, Vital, or a single cycle).", class: "status" });
+  const send = el("button", { textContent: "SEND TO FM-1", disabled: true });
+  const view = el("canvas", { class: "view" });
+  const cvs = [], rng = [];
+  for (let k = 0; k < 5; k++) {
+    const c = el("canvas"), r = el("input", { type: "range", min: 0, max: 0, value: 0 }), lab = el("span", { textContent: `WAVE ${k + 1}` });
+    r.oninput = () => { picksU[k] = +r.value; lab.textContent = `WAVE ${k + 1}: FRAME ${picksU[k] + 1}`; update(); };
+    cvs.push(c); rng.push([r, lab]);
+    frames.append(el("div", {}, c, r, lab));
   }
+  function update() {
+    if (!table) return;
+    const u = +slot.value;
+    data = makeBank(table, picksU);
+    ubank[u] = data;
+    drawTable(view, 9 + u, 64, T.acc);
+    cvs.forEach((c, k) => {
+      const { g, w, h } = fitCanvas(c), d = data.subarray(k * N, (k + 1) * N), pts = [];
+      for (let x = 0; x <= w; x++) pts.push([x, h / 2 - (d[Math.min(N - 1, Math.floor((x / w) * N))] / PEAK) * h * 0.42]);
+      g.fillStyle = rgba(T.acc, 0.25); g.beginPath(); g.moveTo(0, h / 2);
+      for (const [x, y] of pts) g.lineTo(x, y);
+      g.lineTo(w, h / 2); g.fill();
+      g.strokeStyle = T.acc; g.lineWidth = 2; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+    });
+    post({ t: "ubank", u, data });
+    refresh();
+  }
+  slot.onchange = update;
+  file.onchange = async () => {
+    try {
+      table = parseWav(await file.files[0].arrayBuffer());
+      picksU = defaultPicks(table.frames);
+      rng.forEach(([r, lab], k) => { r.max = table.frames - 1; r.value = picksU[k]; lab.textContent = `WAVE ${k + 1}: FRAME ${picksU[k] + 1}`; });
+      name.value = file.files[0].name.replace(/\.wav$/i, "").toUpperCase().slice(0, 13);
+      info.textContent = `${table.frames} frame${table.frames > 1 ? "s" : ""} of ${table.frameSize} samples. Pick a bank on OSC A or B to hear it.`;
+      send.disabled = false;
+      update();
+    } catch (e) { info.textContent = e.message; }
+  };
+  send.onclick = async () => {
+    if (!dev.connected) return status("Connect the FM-1 first.");
+    const u = +slot.value;
+    try {
+      status(`Sending USER ${u + 1}...`);
+      await dev.putBank(u, bankBytes(name.value, data));
+      ubankUsed[u] = true;
+      renderUbankSlots();
+      status(`USER ${u + 1} is on the FM-1.`);
+    } catch (e) { status(e.message); }
+  };
+  box.append(el("div", { class: "ubank" }, el("div", { class: "row" }, file, el("label", {}, "INTO ", slot), name, send),
+    view, frames, info));
+  renderUbankSlots();
 }
 
 /* --------------------------------------------------------------------------------------------- device --- */
@@ -578,13 +631,17 @@ async function connect() {
     const info = await dev.connect(await navigator.requestMIDIAccess({ sysex: true }));
     $("devbox").hidden = false;
     $("devname").textContent = info.name;
-    status("Connected");
+    status("Connected: reading the user presets...");
     cur = info.cur;
-    $("slot").value = cur;
+    ubankUsed = info.ubank;
     await pull();
+    await readUserNames();
+    $("slot").value = cur >= 64 ? cur : String(64 + Math.max(0, userNames.indexOf(null)));
+    status("Connected");
+    renderUbankSlots();
   } catch (e) { status(e); }
 }
-async function pull() { loadBytes((await dev.getPatch(127)).bytes); }
+async function pull() { loadBytes((await dev.getPatch(0x3fff)).bytes); }
 dev.onchange = () => { if (!dev.connected) { $("devbox").hidden = true; status("Not connected"); } };
 dev.oncc = (cc, v) => {
   const p = M.params.find((x) => x.cc === cc);
@@ -593,14 +650,15 @@ dev.oncc = (cc, v) => {
   const k = knobs.find((x) => PI[x.key] === p.id);
   if (k) { k.el.classList.add("hit"); setTimeout(() => k.el.classList.remove("hit"), 700); }
 };
-dev.onevent = (e) => { cur = e.cur; pull().catch(status); };
+dev.onevent = (e) => { cur = e.cur; pull().catch(status); if (e.kind === 2) readUserNames(); };
 
 /* ----------------------------------------------------------------------------------------------- start --- */
 build();
 buildKb();
 buildUbanks();
 async function choose(n) {
-  cur = (n + 64) % 64;
+  const max = dev.connected ? 192 : 64;
+  cur = (n + max) % max;
   $("slot").value = cur;
   if (dev.connected) { await dev.select(cur).catch(status); await pull().catch(status); } else factory(cur);
 }
@@ -609,10 +667,10 @@ $("prev").onclick = () => choose(cur - 1);
 $("next").onclick = () => choose(cur + 1);
 $("theme").onchange = () => setTheme(+$("theme").value);
 $("init").onclick = () => {
-  const b = new Uint8Array(96);
+  const b = new Uint8Array(128);
   "INIT".split("").forEach((c, i) => (b[i] = c.charCodeAt(0)));
   M.params.forEach((p) => (b[12 + p.id] = p.def));
-  b[77] = 0xc5; b[78] = 1;
+  b[O_MAGIC] = 0xc5; b[O_VER] = 2;
   patch.set(b);
   pushPatch();
 };
@@ -627,14 +685,27 @@ $("random").onclick = () => {
 };
 $("audio").onclick = (e) => { e.stopPropagation(); soundButton(); };
 $("connect").onclick = connect;
-$("save").onclick = async () => { try { await dev.putPatch(+$("slot").value, patch); status("Saved."); } catch (e) { status(e); } };
+$("save").onclick = async () => {
+  const sl = +$("slot").value;
+  try {
+    await dev.putPatch(sl, patch);
+    userNames[sl - 64] = String.fromCharCode(...patch.slice(0, 12)).replace(/\0.*$/, "").trim() || "?";
+    buildPresetList();
+    $("slot").value = sl;
+    status(`Saved to ${label(sl)}.`);
+  } catch (e) { status(e); }
+};
 $("pull").onclick = () => pull().catch(status);
-$("reset").onclick = async () => { try { await dev.resetPreset(+$("slot").value); status("Back to the factory preset."); } catch (e) { status(e); } };
-const addStep = (v) => { if (patch[76] >= 16) return; if (!patch[76]) patch[79] = 60; patch[80 + patch[76]++] = v; pushPatch(); };
-$("stepadd").onclick = () => addStep(patch[76] ? patch[80 + patch[76] - 1] || 64 : 64);
+$("reset").onclick = async () => {
+  const sl = +$("slot").value;
+  try { await dev.resetPreset(sl); userNames[sl - 64] = null; buildPresetList(); $("slot").value = sl; status(`${label(sl)} emptied.`); }
+  catch (e) { status(e); }
+};
+const addStep = (v) => { if (patch[O_STEPS] >= 16) return; if (!patch[O_STEPS]) patch[O_ROOT] = 60; patch[O_STEP + patch[O_STEPS]++] = v; pushPatch(); };
+$("stepadd").onclick = () => addStep(patch[O_STEPS] ? patch[O_STEP + patch[O_STEPS] - 1] || 64 : 64);
 $("steprest").onclick = () => addStep(0);
-$("stepdel").onclick = () => { if (patch[76]) { patch[76]--; pushPatch(); } };
-$("stepclear").onclick = () => { patch[76] = 0; pushPatch(); };
+$("stepdel").onclick = () => { if (patch[O_STEPS]) { patch[O_STEPS]--; pushPatch(); } };
+$("stepclear").onclick = () => { patch[O_STEPS] = 0; pushPatch(); };
 let th = 2;
 try { const s = localStorage.getItem("crafty-theme"); if (s !== null) th = +s; } catch (e) { /* no storage */ }
 $("theme").value = th;

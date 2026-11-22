@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Crafty Synth: the web editor's commands (docs/PROTOCOL.md), in Felucca's editor frames F0 7D 46 4C cmd args F7.
  * Included by cr_app.c (its statics). Parameter edits need no command: every parameter is a MIDI CC (the
- * CRAFTsynth's chart), and the FM-1 sends the CC of every knob turned, so the editor and the panel follow each
- * other. Copyright (C) 2026 Jamie (TwistedGenetics). */
+ * CRAFTsynth's chart and free numbers for the rest), and the FM-1 sends the CC of every knob turned, so the editor
+ * and the panel follow each other. Protocol 2 (0.4): preset slots are two 7-bit bytes (0..191; 0x3FFF the working
+ * patch), patches are 128 bytes, user banks 0..31 live in flash. Copyright (C) 2026 Jamie (TwistedGenetics). */
 enum { CR_ED_INFO = 40, CR_ED_PGET, CR_ED_PPUT, CR_ED_SELECT, CR_ED_GGET, CR_ED_GPUT, CR_ED_WPUT, CR_ED_WCOMMIT,
        CR_ED_EVT /* 48: sent by the FM-1, never asked for */, CR_ED_WGET, CR_ED_PRESET_RESET };
-#define CR_ED_WORKING 127u
-#define CR_ED_PROTO 1u
+#define CR_ED_WORKING 0x3FFFu
+#define CR_ED_PROTO 2u
 #define CR_ED_CHUNK 256u
 
 int cr_ed_long(uint32_t cmd) { return cmd == CR_ED_PPUT || cmd == CR_ED_GPUT || cmd == CR_ED_WPUT; }
@@ -34,6 +35,12 @@ static uint32_t cr_ed_unpack(const uint8_t *a, uint32_t na, uint8_t *out, uint32
     }
     return n;
 }
+static uint32_t cr_ed_slot(const uint8_t *a) { return (uint32_t)a[0] | (uint32_t)a[1] << 7; }
+static void cr_ed_put_slot(void (*put)(uint32_t), uint32_t s)
+{
+    put(s & 0x7Fu);
+    put((s >> 7) & 0x7Fu);
+}
 
 int cr_ed_cmd(uint32_t cmd, const uint8_t *a, uint32_t na, void (*put)(uint32_t))
 {
@@ -46,59 +53,62 @@ int cr_ed_cmd(uint32_t cmd, const uint8_t *a, uint32_t na, void (*put)(uint32_t)
             put((uint8_t)v[i] & 0x7Fu);
         put(0);
         put(CR_ED_PROTO);
-        put(CR_NPRESET);
-        put(cr_g.cur);
+        put(CR_NFACTORY);
+        put(CR_NUSER & 0x7Fu);
+        put(CR_NUSER >> 7);
+        cr_ed_put_slot(put, cr_g.cur);
         put(cr_dirty);
+        put(CR_NUBANK);
         for (i = 0; i < CR_NUBANK; i++)
-            put(cr_ub[i].magic == CR_UBANK_MAGIC);
+            put(cr_ubank(i) != 0);
         return 1;
     }
     case CR_ED_PGET:
-        if (na < 1u)
+        if (na < 2u)
             return 0;
-        s = a[0];
+        s = cr_ed_slot(a);
         if (s == CR_ED_WORKING)
             t = cr_p;
         else if (s < CR_NPRESET)
             cr_preset_read(s, &t);
         else
             return 0;
-        put(s);
+        cr_ed_put_slot(put, s);
         put(s < CR_NPRESET ? (uint32_t)cr_preset_saved(s) : (uint32_t)cr_dirty);
         cr_ed_pack(put, (const uint8_t *)&t, CR_PATCH_BYTES);
         return 1;
     case CR_ED_PPUT:
-        if (na < 2u)
+        if (na < 3u)
             return 0;
-        s = a[0];
-        if (cr_ed_unpack(a + 1, na - 1u, (uint8_t *)&t, CR_PATCH_BYTES) != CR_PATCH_BYTES || cr_patch_check(&t))
+        s = cr_ed_slot(a);
+        if (cr_ed_unpack(a + 2, na - 2u, (uint8_t *)&t, CR_PATCH_BYTES) != CR_PATCH_BYTES || cr_patch_check(&t))
             return 0;
-        put(s);
+        cr_ed_put_slot(put, s);
         if (s == CR_ED_WORKING) {
             cr_use(&t);
             cr_dirty = 1;
             put(0);
-        } else if (s < CR_NPRESET) {
+        } else if (cr_is_user(s)) {
             cr_app_panic();
             put(cr_preset_write(s, &t) == 0 ? 0u : 1u);
             if (s == cr_g.cur && !cr_dirty)
                 cr_use(&t);
             cr_evt(2);
         } else
-            return 0;
+            put(2);                              /* the factory presets can't be written */
         return 1;
     case CR_ED_SELECT:
-        if (na < 1u || a[0] >= CR_NPRESET)
+        if (na < 2u || (s = cr_ed_slot(a)) >= CR_NPRESET)
             return 0;
-        cr_load(a[0]);
-        put(a[0]);
+        cr_load(s);
+        cr_ed_put_slot(put, s);
         return 1;
-    case CR_ED_PRESET_RESET:                     /* the slot back to its factory preset */
-        if (na < 1u || a[0] >= CR_NPRESET)
+    case CR_ED_PRESET_RESET:                     /* a user slot emptied */
+        if (na < 2u || !cr_is_user(s = cr_ed_slot(a)))
             return 0;
         cr_app_panic();
-        put(a[0]);
-        put(cr_preset_write(a[0], 0) == 0 ? 0u : 1u);
+        cr_ed_put_slot(put, s);
+        put(cr_preset_write(s, 0) == 0 ? 0u : 1u);
         return 1;
     case CR_ED_GGET:
         cr_ed_pack(put, (const uint8_t *)&cr_g, sizeof cr_g);
@@ -108,6 +118,7 @@ int cr_ed_cmd(uint32_t cmd, const uint8_t *a, uint32_t na, void (*put)(uint32_t)
         if (cr_ed_unpack(a, na, (uint8_t *)&g, sizeof g) != sizeof g || cr_globals_check(&g))
             return 0;
         g.cur = cr_g.cur;
+        g.pad[0] = cr_g.pad[0];
         cr_g = g;
         cr_globals_save();
         cr_touch();
@@ -124,39 +135,39 @@ int cr_ed_cmd(uint32_t cmd, const uint8_t *a, uint32_t na, void (*put)(uint32_t)
         if (u >= CR_NUBANK || off >= sizeof(cr_ubank_t))
             return 0;
         n = sizeof(cr_ubank_t) - off < CR_ED_CHUNK ? sizeof(cr_ubank_t) - off : CR_ED_CHUNK;
-        if (cr_ed_unpack(a + 2, na - 2u, (uint8_t *)&cr_ub[u] + off, n) != n)
+        if (cr_ed_unpack(a + 2, na - 2u, (uint8_t *)&cr_ubw + off, n) != n)
             return 0;
         put(u);
         put(c);
         return 1;
     }
-    case CR_ED_WCOMMIT: {                        /* checked, saved, and rebuilt if a wave plays it */
+    case CR_ED_WCOMMIT: {                        /* checked, written to flash, and rebuilt if a wave plays it */
         uint32_t u, k;
         int r;
         if (na < 1u || a[0] >= CR_NUBANK)
             return 0;
         u = a[0];
         put(u);
-        if (cr_ub[u].magic != CR_UBANK_MAGIC) {
-            cr_ubank_load(u);
+        if (cr_ubw.magic != CR_UBANK_MAGIC || cr_ubw.ver != 1u) {
             put(2);
             return 1;
         }
-        cr_ub[u].name[sizeof cr_ub[u].name - 1u] = 0;
+        cr_ubw.name[sizeof cr_ubw.name - 1u] = 0;
         cr_app_panic();
-        r = plat_store_save(u ? OBJ_MOTION : OBJ_SONG, &cr_ub[u], sizeof cr_ub[u]);
+        cr_lock();
+        cr_synth_tables(&cr_syn, 0, 0, 0);       /* nothing reads a table while its bank changes */
+        cr_unlock();
         for (k = 0; k < 3u; k++)
             if (cr_tab_bank[k] == CR_NBANK + u)
-                cr_tab_bank[k] = 0xFF;           /* (rebuilt by the main loop if it is in use) */
-        cr_lock();
-        cr_synth_tables(&cr_syn, 0, 0, 0);       /* silent for the few ms until then */
-        cr_unlock();
-        cr_want_tables = 1;
+                cr_tab_bank[k] = 0xFF;
+        r = cr_ubank_write(u, &cr_ubw);
+        cr_want_tables = 1;                      /* (the main loop rebuilds what the patch plays) */
         put(r == 0 ? 0u : 1u);
         return 1;
     }
     case CR_ED_WGET: {
         uint32_t u, c, n, off;
+        const cr_ubank_t *b;
         if (na < 2u || a[0] >= CR_NUBANK)
             return 0;
         u = a[0];
@@ -164,10 +175,12 @@ int cr_ed_cmd(uint32_t cmd, const uint8_t *a, uint32_t na, void (*put)(uint32_t)
         off = c * CR_ED_CHUNK;
         if (off >= sizeof(cr_ubank_t))
             return 0;
+        b = cr_ubank(u);
         n = sizeof(cr_ubank_t) - off < CR_ED_CHUNK ? sizeof(cr_ubank_t) - off : CR_ED_CHUNK;
         put(u);
         put(c);
-        cr_ed_pack(put, (const uint8_t *)&cr_ub[u] + off, n);
+        if (b)
+            cr_ed_pack(put, (const uint8_t *)b + off, n);
         return 1;
     }
     default:

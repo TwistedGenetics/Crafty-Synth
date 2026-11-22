@@ -38,6 +38,7 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
 static uint32_t now_ms, held_btn, held_keys, lit_btn, lit_keys, dim_keys, midi_out_n, midi_notes_on;
 static int32_t enc_acc[NE];
 uint32_t plat_ms(void) { return now_ms; }
+uint32_t plat_cpu_pct(void) { return 12; }
 uint32_t plat_buttons(void) { return held_btn; }
 uint32_t plat_keys(void) { return held_keys; }
 int32_t plat_enc(int role)
@@ -76,6 +77,36 @@ int plat_store_save(uint32_t obj, const void *src, uint32_t len)
         return -1;
     memcpy(store[obj], src, len);
     store_len[obj] = (int)len;
+    return 0;
+}
+/* the user area in flash (cr_app.h): a RAM image, erased; it outlives a reboot */
+static uint8_t flash_img[0x3C000];
+static int flash_inited, flash_erases;
+static void flash_init(void)
+{
+    if (!flash_inited) {
+        memset(flash_img, 0xFF, sizeof flash_img);
+        flash_inited = 1;
+    }
+}
+const uint8_t *cr_flash_ptr(uint32_t off) { flash_init(); return flash_img + (off < sizeof flash_img ? off : 0); }
+int cr_flash_erase(uint32_t off)
+{
+    flash_init();
+    if (off >= sizeof flash_img || (off & 0xFFFu))
+        return -1;
+    memset(flash_img + off, 0xFF, 0x1000);
+    flash_erases++;
+    return 0;
+}
+int cr_flash_write(uint32_t off, const void *src, uint32_t n)
+{
+    uint32_t i;
+    flash_init();
+    if (off + n > sizeof flash_img)
+        return -1;
+    for (i = 0; i < n; i++)                     /* flash: bits only go from 1 to 0 */
+        flash_img[off + i] &= ((const uint8_t *)src)[i];
     return 0;
 }
 static void cr_lock(void) {}
@@ -286,6 +317,21 @@ int main(int argc, char **argv)
         } else if (!strcmp(a, "theme")) {      /* theme N: the screen's colours */
             cr_g.theme = (uint8_t)atoi(b);
             cr_touch();
+        } else if (!strcmp(a, "oldstore")) {   /* a 0.3 store: a saved preset (slot 5) and user bank 1 */
+            static uint8_t o[PLAT_STORE_MAX];
+            memset(o, 0, sizeof o);
+            memcpy(o + 5 * 96, "OLD ONE", 7);
+            o[5 * 96 + 12 + CR_CUT] = 33;
+            o[5 * 96 + 77] = CR_PATCH_MAGIC;
+            o[5 * 96 + 78] = 1;
+            plat_store_save(OBJ_PAT0, o, 32 * 96);
+            memset(o, 0, sizeof o);
+            o[0] = 0xC7;
+            o[1] = 1;
+            memcpy(o + 2, "OLDBANK", 7);
+            plat_store_save(OBJ_SONG, o, 2576);
+            cr_g.pad[0] = 0;
+            plat_store_save(OBJ_SOUND, &cr_g, sizeof cr_g);
         } else if (!strcmp(a, "reboot")) {
             cr_app_init();
             cr_page = PG_OSC;
@@ -304,6 +350,10 @@ int main(int argc, char **argv)
                 got = cr_syn.gate;
             else if (!strcmp(b, "note"))
                 got = cr_syn.note;
+            else if (!strcmp(b, "user1saved"))   /* U1-1 holds a patch, and its cutoff */
+                got = cr_preset_saved(CR_NFACTORY) ? cr_user_rec(CR_NFACTORY)[12 + CR_CUT] : -1;
+            else if (!strcmp(b, "ubank1"))
+                got = cr_ubank(0) != 0;
             else if (!strcmp(b, "steps"))
                 got = cr_p.steps;
             else if (!strcmp(b, "arp"))
@@ -316,6 +366,8 @@ int main(int argc, char **argv)
                 got = cr_syn.t1 ? (long)cr_tab_bank[cr_syn.t1 - cr_tab] : -1;
             else if (!strcmp(b, "bank2"))
                 got = cr_syn.t2 ? (long)cr_tab_bank[cr_syn.t2 - cr_tab] : -1;
+            else if (!strcmp(b, "erases"))
+                got = flash_erases;
             else if (!strcmp(b, "events")) {
                 got = (long)evt_n;
                 evt_n = 0;

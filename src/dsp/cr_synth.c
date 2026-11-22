@@ -17,7 +17,8 @@
 static const int8_t DEST_P[CR_ND] = {
     -1, CR_W1POS, CR_W2POS, CR_MIX, -1, -1, CR_OMAMT, CR_L1RATE, CR_L2RATE, CR_L1SHAPE, CR_L2SHAPE, CR_CUT, CR_RES,
     CR_MORPH, CR_FEGAMT, CR_FA, CR_FD, CR_FS, CR_FR, CR_AEGAMT, CR_AA, CR_AD, CR_AS, CR_AR, CR_VOL, CR_MA, CR_MD,
-    CR_MS, CR_MR, CR_DIST, CR_DMIX, CR_DTIME, CR_DFB, CR_SPREAD, CR_GLIDE, CR_DEP0, CR_DEP1, CR_DEP2};
+    CR_MS, CR_MR, CR_DIST, CR_DMIX, CR_DTIME, CR_DFB, CR_SPREAD, CR_GLIDE, CR_DEP0, CR_DEP1, CR_DEP2,
+    CR_BAMT, CR_VMIX, CR_CHMIX, CR_PHMIX, CR_CRUSH, CR_OTT};
 
 /* SPREAD's chord shapes: semitones of the four pairs (a few cents apart, so they beat a little) */
 static const float SHAPE[10][4] = {
@@ -42,16 +43,18 @@ static float rndf(cr_synth_t *s) { return (float)(int32_t)rnd(s) * (1.f / 214748
 static float env_time(float v) { return 0.001f + 4.f * v * v * v; }               /* 0..4 s, as the CRAFTsynth */
 static float note_hz(float n) { return 440.f * cr_exp2f((n - 69.f) * (1.f / 12.f)); }
 
-void cr_synth_init(cr_synth_t *s, int16_t *dly)
+void cr_synth_init(cr_synth_t *s, int16_t *mem)
 {
     uint8_t *b = (uint8_t *)s;
     uint32_t i;
     cr_patch_t p;
     for (i = 0; i < sizeof *s; i++)
         b[i] = 0;
-    s->dl = dly;
+    s->dl = mem;
     for (i = 0; i < CR_DLY_LEN; i++)
-        dly[i] = 0;
+        mem[i] = 0;
+    cr_fx_init(&s->fx, mem + CR_DLY_LEN);
+    cr_filt_init(&s->filt, mem + CR_DLY_LEN + CR_FX_MEM);
     s->rng = 0x1234567u;
     s->tempo = 120.f;
     s->note = 48;
@@ -354,20 +357,10 @@ static void control(cr_synth_t *s)
             p->lv2 = mip(p->inc2);
         }
     }
-    /* the filter */
+    /* the filter (its type, cutoff with the filter EG, resonance, morph) */
     {
-        float cut = clamp01(e[CR_D_CUT] + (e[CR_D_FEGAMT] - 0.5f) * 2.f * s->env[0].lv), f, g, k, a1;
-        f = 20.f * cr_exp2f(cut * 10.f);
-        if (f > 0.45f * FS)
-            f = 0.45f * FS;
-        g = cr_tanf(3.14159265f * f / FS);
-        k = 2.f * (1.f - 0.985f * e[CR_D_RES]);
-        a1 = 1.f / (1.f + g * (g + k));
-        s->g_a1 = a1;
-        s->g_a2 = g * a1;
-        s->g_a3 = g * g * a1;
-        s->g_k = k;
-        s->morph = e[CR_D_MORPH];
+        float cut = clamp01(e[CR_D_CUT] + (e[CR_D_FEGAMT] - 0.5f) * 2.f * s->env[0].lv);
+        cr_filt_set(&s->filt, cr_band(s->raw[CR_FTYPE], CR_NFTYPE), 20.f * cr_exp2f(cut * 10.f), e[CR_D_RES], e[CR_D_MORPH]);
     }
     /* the amp: AMP EG amount (bipolar; at 0 it drones) times the volume */
     {
@@ -396,6 +389,9 @@ static void control(cr_synth_t *s)
         s->dl_fb = e[CR_D_DFB] * 0.9f;
         s->dl_mix = e[CR_D_DMIX];
     }
+    cr_fx_set(&s->fx, cr_band(s->raw[CR_ERA], 6), e[CR_D_CRUSH], e[CR_D_PHMIX], s->base[CR_PHRATE], e[CR_D_CHMIX],
+              s->base[CR_CHRATE], cr_band(s->raw[CR_VMODE], 6), s->base[CR_VSIZE], s->base[CR_VDECAY], e[CR_D_VMIX],
+              s->base[CR_VWARP], s->base[CR_VDENS], s->base[CR_VMOD], e[CR_D_OTT]);
 }
 
 /* ------------------------------------------------------------------------------------------ the samples --- */
@@ -431,7 +427,8 @@ void cr_synth_render(cr_synth_t *s, float *lr, uint32_t n)
     uint32_t done = 0;
     while (done < n) {
         uint32_t k, len = n - done < CR_CTRL ? n - done : CR_CTRL, i, om, np;
-        float *e = s->eff, w1x, w2x, mix, a, ratio, crush_l, ncol, ngain, amp0, damp, wl, wb, wh;
+        float *e = s->eff, w1x, w2x, mix, a, ratio, crush_l, ncol, ngain, amp0, damp, ba, bsync;
+        uint32_t bm;
         uint32_t wa1, wb1, wa2, wb2;
         float m1, m2;
         control(s);
@@ -460,9 +457,9 @@ void cr_synth_render(cr_synth_t *s, float *lr, uint32_t n)
         ngain = cr_exp2f(-0.5f * cr_log2f(ncol)) * 0.6f;
         amp0 = s->amp_prev;
         damp = (s->amp - amp0) / (float)len;
-        wh = s->morph < 0.5f ? 0.f : 2.f * s->morph - 1.f;
-        wb = s->morph < 0.5f ? 2.f * s->morph : 2.f - 2.f * s->morph;
-        wl = s->morph < 0.5f ? 1.f - 2.f * s->morph : 0.f;
+        bm = cr_band(s->raw[CR_BMODE], 5);       /* OSC B's modifier: A's last sample modulates B */
+        ba = e[CR_D_BAMT];
+        bsync = 1.f + ba * 3.f;                  /* SYNC TO A: B up to 2 octaves above, restarted with A */
         np = s->npair;
         for (k = 0; k < len; k++) {
             float sum = 0.f, y, nz = 0.f;
@@ -475,20 +472,38 @@ void cr_synth_render(cr_synth_t *s, float *lr, uint32_t n)
                 cr_pair_t *p = &s->pr[i];
                 const int16_t *A1 = s->t1->w[wa1][p->lv1], *B1 = s->t1->w[wb1][p->lv1];
                 float w2, x, ph;
-                /* Wave 2 (the modulator) */
-                p->p2 += p->inc2;
-                if (p->p2 >= 1.f)
-                    p->p2 -= 1.f;
-                if (s->noise2) {
-                    float sn = rd(s->t2->w[0][0], s->t2->w[0][0], 0.f, p->p2) * sc, nm = e[CR_D_W2] * 2.f;
-                    nm = nm > 1.f ? 1.f : nm;
-                    w2 = sn + (nz - sn) * nm;
-                } else
-                    w2 = rd(s->t2->w[wa2][p->lv2], s->t2->w[wb2][p->lv2], m2, p->p2) * sc;
-                /* the note's master phase (the sync modes' counter) */
-                p->pm += p->incm;
-                if (p->pm >= 1.f)
-                    p->pm -= 1.f;
+                /* Wave 2 (the modulator), through its own modifier (0.4): A's last sample is its modulator */
+                {
+                    float rp, la = p->lasta;
+                    int wrapped = 0;
+                    p->pm += p->incm;              /* the note's master phase (the sync modes' counter) */
+                    if (p->pm >= 1.f) {
+                        p->pm -= 1.f;
+                        wrapped = 1;
+                    }
+                    if (ba > 0.f && bm == 0u)      /* FM FROM A: through zero */
+                        p->p2 = wrap1(p->p2 + p->inc2 * (1.f + ba * 6.f * la));
+                    else if (ba > 0.f && bm == 2u) {   /* SYNC TO A */
+                        p->p2 = wrap1(p->p2 + p->inc2 * bsync);
+                        if (wrapped)
+                            p->p2 = 0.f;
+                    } else {
+                        p->p2 += p->inc2;
+                        if (p->p2 >= 1.f)
+                            p->p2 -= 1.f;
+                    }
+                    rp = (ba > 0.f && bm == 1u) ? wrap1(p->p2 + ba * 1.5f * la) : p->p2;   /* PM FROM A */
+                    if (s->noise2) {
+                        float sn = rd(s->t2->w[0][0], s->t2->w[0][0], 0.f, rp) * sc, nm = e[CR_D_W2] * 2.f;
+                        nm = nm > 1.f ? 1.f : nm;
+                        w2 = sn + (nz - sn) * nm;
+                    } else
+                        w2 = rd(s->t2->w[wa2][p->lv2], s->t2->w[wb2][p->lv2], m2, rp) * sc;
+                    if (ba > 0.f && bm == 3u)      /* RING WITH A */
+                        w2 += (w2 * la - w2) * ba;
+                    else if (ba > 0.f && bm == 4u) /* WAVEFOLD: B folded on itself */
+                        w2 = cr_sin_turn(cr_frac(w2 * (1.f + ba * 8.f) * 0.25f));
+                }
                 /* Wave 1 through the modifier */
                 switch (om) {
                 case CR_OM_PM:
@@ -577,24 +592,20 @@ void cr_synth_render(cr_synth_t *s, float *lr, uint32_t n)
                     }
                     break;
                 }
+                p->lasta = x;
                 sum += x + (w2 - x) * mix;
             }
             y = np > 1u ? sum * 0.5f : sum;
-            /* the filter: a 2-pole state-variable (TPT), morphed LP -> BP -> HP */
-            {
-                float v3 = y - s->ic2, v1 = s->g_a1 * s->ic1 + s->g_a2 * v3, v2 = s->ic2 + s->g_a2 * s->ic1 + s->g_a3 * v3;
-                float hp;
-                s->ic1 = 2.f * v1 - s->ic1;
-                s->ic2 = 2.f * v2 - s->ic2;
-                hp = y - s->g_k * v1 - v2;
-                y = wl * v2 + wb * v1 + wh * hp;
-            }
+            /* the filter (its type: cr_filter.c) */
+            y = cr_filt_run(&s->filt, y);
             /* the distortion: a waveshaping overdrive */
             if (s->dist_mix > 0.f) {
                 float d = cr_tanh(y * s->dist_g) * (1.f - 0.25f * s->dist_mix);
                 y += (d - y) * s->dist_mix;
             }
+            y = cr_fx_era(&s->fx, y);          /* EraCrush: the sampler's converter */
             y *= amp0 + damp * (float)k;
+            y = cr_fx_phaser(&s->fx, y);
             /* the delay (mono, its time glides: moving it bends the echoes like tape) */
             {
                 float rp, f, wet, a0, a1;
@@ -618,9 +629,15 @@ void cr_synth_render(cr_synth_t *s, float *lr, uint32_t n)
                 s->dl_w = (s->dl_w + 1u) & (CR_DLY_LEN - 1u);
                 y += (wet - y) * s->dl_mix;
             }
-            y = cr_soft(y * 0.8f);
-            lr[2u * (done + k)] = y;
-            lr[2u * (done + k) + 1u] = y;
+            /* from here stereo: the chorus, the reverb, OTT */
+            {
+                float L, R;
+                cr_fx_chorus(&s->fx, y, &L, &R);
+                cr_fx_reverb(&s->fx, &L, &R);
+                cr_fx_ott(&s->fx, &L, &R);
+                lr[2u * (done + k)] = cr_soft(L * 0.8f);
+                lr[2u * (done + k) + 1u] = cr_soft(R * 0.8f);
+            }
         }
         s->amp_prev = s->amp;
         done += len;

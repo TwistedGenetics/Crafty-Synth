@@ -24,10 +24,10 @@ bottom. "Unverified" means nobody has measured it on a device yet, as far as we 
 |---|---|
 | Keys | notes F3 – G5 (or a scale from its root), OCT −3 … +3 |
 | Screen | light background, dark text; values in 23 px, the knob just turned in 44 px Barlow Bold |
-| Synth | one voice of 8 wavetable oscillators (4 pairs), mip-mapped 256-sample tables built in RAM (3 × 20 KB), 2-pole SVF, delay 128 KB; one core |
-| Storage | presets: 32 in `OBJ_PAT0`, 32 in `OBJ_PAT1` (96 B each); globals in `OBJ_SOUND`; user wavetables in `OBJ_SONG` and `OBJ_MOTION` (2,576 B each); X0X's calibration (`OBJ_PANEL`) untouched |
+| Synth | one voice of 8 wavetable oscillators (4 pairs), mip-mapped 256-sample tables built in RAM (3 × 20 KB), 12 filter types, effects memory 144 KB (delay 64 KB, reverb and chorus 76 KB, comb 4 KB) in X0X's pool; one core |
+| Storage | globals in `OBJ_SOUND`; 128 user presets (128 B each) and 32 user wavetable banks (one 4 KB sector each) in X0X's sample region 0xA0000–0xDBFFF; 0.1–0.3's presets (`OBJ_PAT0/1`) and banks (`OBJ_SONG`, `OBJ_MOTION`) are copied over once; X0X's calibration (`OBJ_PANEL`) untouched |
 | MIDI | notes and the CRAFTsynth's CCs in and out; program change; MIDI clock drives the arp-seq |
-| CPU | host measurement (PC): about 120–150 ns a frame for the heaviest patch (spread chord, vocal sync, noise, distortion, delay). The budget at 44.1 kHz is about 8,000 cycles a frame at 360 MHz. On the FM-1: **unverified** |
+| CPU | host measurement (PC): about 360 ns a frame with every effect on; most patches far less. The budget at 44.1 kHz is about 8,000 cycles a frame at 360 MHz. On the FM-1: **unverified**; GLO → SETUP shows the load |
 
 ## Build and update
 

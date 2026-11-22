@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4 beta (2026-11-22)
+
+- **OSC B modifier**: its own slot beside OSC A's 16 modifiers. B MODE picks FM from A, PM from A, sync to A, ring with
+  A or a wavefold; B MOD sets how much (and is a matrix destination).
+- **12 filter types** after Mega Synth, each still morphing with MORPH: SVF, ladder, MS-20, TB-303, SEM, Steiner,
+  Polivoks, formant, comb +/-, phaser, dual peak and decimator. TYPE is on the FILTER page.
+- **5 new effects on 4 new FX pages**: Horizon (a Super-Massive-style reverb: room, hall, halo, swell, abyss, dub, with
+  size, decay up to 30 s, warp, density and modulation), chorus, phaser, OTT, and EraCrush (SP-1200, MPC60, S950,
+  S1000 and Amiga). Reverb, chorus, phaser, crush and OTT are matrix destinations.
+- **128 user preset slots** (U1-1 … U16-8) beside the 64 factory presets, which can no longer be overwritten. SAVE
+  stores into a user slot; saving from a factory preset picks the first empty one.
+- **32 user wavetable banks** (was 2).
+- Presets and banks you saved in 0.1–0.3 move to U1-1 onward and user banks 1–2 on first start.
+- GLO → SETUP shows the audio's CPU load.
+- The delay's longest time is now about 0.74 s (the reverb took the rest of its memory).
+- The editor speaks protocol 2: it needs the FM-1 on 0.4.
+
 ## 0.3 beta (2026-11-22)
 
 - SERUM is the default theme (on a new install; GLO -> SETUP -> THEME changes it).

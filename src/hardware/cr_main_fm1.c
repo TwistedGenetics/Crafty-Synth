@@ -150,6 +150,50 @@ static void audio_silence(void)                     /* IRQs off (flash erase): t
         abuf[i] = 0;
 }
 
+/* --------------------------------------------------------------------------------------- the user area --- */
+/* Crafty Synth's presets and wavetables (cr_app.h): X0X's sample-slot flash, 0xA0000..0xDBFFF, which this firmware
+ * doesn't otherwise use; read in place through the XIP window, written 4 KB at a time with the audio silenced */
+#define CR_FL_BASE 0xA0000u
+_Static_assert(CR_FL_BASE + CR_FLASH_SIZE <= 0xDC000u, "the user area ends before X0X's panel calibration");
+static const uint8_t cr_fl_blank[16] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static int cr_fl_ready(void);
+const uint8_t *cr_flash_ptr(uint32_t off)
+{
+    if (!cr_fl_ready() || off >= CR_FLASH_SIZE)
+        return cr_fl_blank;                     /* no flash: everything reads as erased (empty slots) */
+    return (const uint8_t *)fm1_xip_ptr(CR_FL_BASE + off);
+}
+static void cr_fl_inval(uint32_t off, uint32_t n)
+{
+    fm1_irq_off();
+    fl_inval(CR_FL_BASE + off, n);
+    fm1_irq_on();
+}
+int cr_flash_erase(uint32_t off)
+{
+    uint32_t took;
+    int rc;
+    if (!cr_fl_ready() || off >= CR_FLASH_SIZE || (off & 0xFFFu))
+        return -1;
+    audio_silence();
+    rc = fl_erase4k(CR_FL_BASE + off, &took);
+    fm1_wdt_feed();
+    cr_fl_inval(off, 0x1000u);
+    return rc ? -1 : 0;
+}
+int cr_flash_write(uint32_t off, const void *src, uint32_t n)
+{
+    int rc;
+    if (!cr_fl_ready() || off + n > CR_FLASH_SIZE)
+        return -1;
+    audio_silence();
+    rc = fl_write(CR_FL_BASE + off, (const uint8_t *)src, n);
+    fm1_wdt_feed();
+    cr_fl_inval(off, n);
+    return rc ? -1 : 0;
+}
+
 /* ---------------------------------------------------------------------------------------------------- timer --- */
 static uint8_t usb_due;
 void fm1_timer5_irq(void)                           /* 10 kHz: the panel scan, USB at 2 kHz, the ms count */
@@ -587,3 +631,5 @@ void fm1_cstart(void)
     for (;;)
         ;
 }
+
+static int cr_fl_ready(void) { return flash_ok; }

@@ -3,17 +3,21 @@
  * of 8 oscillators (4 on Wave 1, 4 on Wave 2), 16 oscillator modifiers (Wave 1 the carrier, Wave 2 the modulator),
  * SPREAD into unison or chord shapes, a 2-pole state-variable filter morphing low-pass -> band-pass -> high-pass,
  * three ADSR envelopes (filter, amp, mod), two LFOs (LFO 2 up to audio rate, locked to the note), an 8-slot mod
- * matrix (one slot per source), glide with legato, a waveshaping distortion and a delay.
+ * matrix (one slot per source), glide with legato, a waveshaping distortion and a delay; and from 0.4 a modifier
+ * for OSC B, 12 filter types, and EraCrush, a phaser, a chorus, a reverb (Horizon in small) and OTT.
  * Single-precision float, no libm. The editor runs this same file built to WebAssembly.
  * Copyright (C) 2026 Jamie (TwistedGenetics). */
 #pragma once
 #include <stdint.h>
 #include "cr_patch.h"
 #include "cr_wt.h"
+#include "cr_filter.h"
+#include "cr_fx.h"
 
 #define CR_CTRL 4u                     /* modulation, envelopes and pitches: every 4 samples (11 kHz: LFO 2 reaches audio rate) */
 #define CR_PAIRS 4u                    /* a pair: one Wave 1 and one Wave 2 oscillator (8 in all) */
-#define CR_DLY_LEN 65536u              /* the delay's memory, 16-bit mono: 1.49 s at 44.1 kHz */
+#define CR_DLY_LEN 32768u              /* the delay's memory, 16-bit mono: 0.74 s at 44.1 kHz (0.4: the reverb has the rest) */
+#define CR_SYN_MEM (CR_DLY_LEN + CR_FX_MEM + CR_COMB_LEN)   /* int16 samples the synth is given: 144 KB */
 #define CR_NHELD 16u
 
 typedef struct {
@@ -25,6 +29,7 @@ typedef struct {
     float p1, p2, pm;                  /* Wave 1's phase, Wave 2's, the note's master phase (the sync modes) */
     float inc1, inc2, incm;
     float hold, hacc;                  /* DE-REZ: the held sample */
+    float lasta;                       /* Wave 1's last output (OSC B's modifier reads it) */
     uint32_t lv1, lv2;                 /* the mip level each reads */
 } cr_pair_t;
 
@@ -46,7 +51,8 @@ typedef struct {
     uint32_t rng;
     float tempo;
     /* the audio path */
-    float ic1, ic2, g_a1, g_a2, g_a3, g_k, morph;
+    cr_filt_t filt;
+    cr_fx_t fx;
     float amp, amp_prev, noise_lp, dist_g, dist_mix;
     int16_t *dl;
     uint32_t dl_w;
@@ -54,7 +60,7 @@ typedef struct {
     float out_gain;
 } cr_synth_t;
 
-void cr_synth_init(cr_synth_t *s, int16_t *dly_mem /* CR_DLY_LEN */);
+void cr_synth_init(cr_synth_t *s, int16_t *mem /* CR_SYN_MEM */);
 void cr_synth_patch(cr_synth_t *s, const cr_patch_t *p);       /* all of a patch's values */
 void cr_synth_param(cr_synth_t *s, uint32_t id, uint32_t v);   /* one value (a knob, a CC) */
 void cr_synth_tables(cr_synth_t *s, const cr_wtbank_t *w1, const cr_wtbank_t *w2, int w2_noise);

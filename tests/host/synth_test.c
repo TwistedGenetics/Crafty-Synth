@@ -9,7 +9,7 @@
 #include "cr_presets.h"
 
 static cr_synth_t S;
-static int16_t DLY[CR_DLY_LEN];
+static int16_t DLY[CR_SYN_MEM];
 static cr_wtbank_t T[CR_BANKS];
 static int fails;
 #define CHECK(c, ...) do { if (!(c)) { printf("FAIL " __VA_ARGS__); printf("\n"); fails++; } } while (0)
@@ -172,6 +172,13 @@ int main(int argc, char **argv)
     p.p[CR_W2BANK] = (uint8_t)cr_bank_val(CR_BANK_NOISE, 1);
     p.p[CR_DST0] = CR_D_W1;
     p.p[CR_DEP0] = 100;
+    p.p[CR_FTYPE] = (uint8_t)cr_band_val(CR_F_FORMANT, CR_NFTYPE);      /* and 0.4's: every effect on */
+    p.p[CR_BAMT] = 80;
+    p.p[CR_ERA] = (uint8_t)cr_band_val(2, 6);
+    p.p[CR_PHMIX] = 100;
+    p.p[CR_CHMIX] = 100;
+    p.p[CR_VMIX] = 60;
+    p.p[CR_OTT] = 100;
     use(&p);
     cr_synth_on(&S, 48, 100);
     {
@@ -181,15 +188,80 @@ int main(int argc, char **argv)
         printf("     the heaviest patch: %.0f ns a frame on this PC (the FM-1's budget is ~22,700 ns)\n", ns);
     }
     cr_synth_all_off(&S);
+    /* 0.4: every filter type at three morphs, every OSC B mode, every effect: sound, no NaN, no overload */
+    for (m = 0; m < CR_NFTYPE; m++)
+        for (b = 0; b < 3u; b++) {
+            cr_synth_init(&S, DLY);
+            cr_patch_init(&p, "T");
+            p.p[CR_FTYPE] = (uint8_t)cr_band_val(m, CR_NFTYPE);
+            p.p[CR_MORPH] = (uint8_t)(b * 63u);
+            p.p[CR_CUT] = 90;
+            p.p[CR_RES] = 100;
+            use(&p);
+            cr_synth_on(&S, 45, 100);
+            pk = run(22050, &rms);
+            cr_synth_all_off(&S);
+            CHECK(pk >= 0.f && pk > 0.01f && pk <= 1.f, "filter %s morph %u: peak %f", CR_FTYPE_NAME[m], b * 63u, (double)pk);
+        }
+    for (m = 0; m < 5u; m++) {
+        cr_synth_init(&S, DLY);
+        cr_patch_init(&p, "T");
+        p.p[CR_BMODE] = (uint8_t)cr_band_val(m, 5);
+        p.p[CR_BAMT] = 100;
+        p.p[CR_MIX] = 127;                       /* B alone: its modifier must change it */
+        use(&p);
+        cr_synth_on(&S, 45, 100);
+        pk = run(22050, &rms);
+        cr_synth_all_off(&S);
+        CHECK(pk >= 0.f && pk > 0.05f && pk <= 1.f, "OSC B %s: peak %f", CR_BMODE_NAME[m], (double)pk);
+    }
+    {
+        static const uint8_t FXP[][2] = {{CR_ERA, 30}, {CR_PHMIX, 127}, {CR_CHMIX, 127}, {CR_VMIX, 127}, {CR_OTT, 127}};
+        uint32_t vm;
+        for (m = 0; m < 5u; m++)
+            for (vm = 0; vm < (FXP[m][0] == CR_VMIX ? 6u : 1u); vm++) {
+                float tail;
+                cr_synth_init(&S, DLY);
+                cr_patch_init(&p, "T");
+                p.p[FXP[m][0]] = FXP[m][1];
+                p.p[CR_VMODE] = (uint8_t)cr_band_val(vm, 6);
+                p.p[CR_VDECAY] = 127;
+                use(&p);
+                cr_synth_on(&S, 45, 100);
+                pk = run(22050, &rms);
+                cr_synth_off(&S, 45);
+                (void)run(44100u * 3u, 0);
+                tail = run(22050, 0);
+                CHECK(pk >= 0.f && pk > 0.05f && pk <= 1.f && tail >= 0.f, "effect %u mode %u: peak %f tail %f", m, vm, (double)pk, (double)tail);
+                if (FXP[m][0] == CR_VMIX)
+                    printf("     reverb %-6s peak %.2f, 3 s after the note %.3f\n", CR_VMODE_NAME[vm], (double)pk, (double)tail);
+            }
+    }
+    /* a 0.1-0.3 patch upgrades: its 62 values kept, the new ones at their defaults */
+    {
+        uint8_t v1[CR_PATCH_V1_BYTES];
+        cr_patch_t q;
+        for (i = 0; i < sizeof v1; i++)
+            v1[i] = 0;
+        v1[0] = 'X';
+        for (i = 0; i <= CR_ARPRATE; i++)
+            v1[12u + i] = (uint8_t)(i & 0x3Fu);
+        v1[76] = 3;
+        v1[77] = CR_PATCH_MAGIC;
+        v1[78] = 1;
+        v1[80] = 64;
+        CHECK(cr_patch_from_v1(v1, &q) == 0 && q.name[0] == 'X' && q.p[CR_CUT] == (CR_CUT & 0x3Fu) && q.steps == 3 &&
+              q.p[CR_VSIZE] == CR_P[CR_VSIZE].def && q.step[0] == 64, "a v1 patch does not upgrade");
+    }
     /* every factory preset: a note sounds, not too quiet, not overloaded */
-    for (m = 0; m < CR_NPRESET; m++) {
+    for (m = 0; m < CR_NFACTORY; m++) {
         for (i = 0; i < sizeof p; i++)
             ((uint8_t *)&p)[i] = CR_FACTORY[m][i];
         CHECK(cr_patch_check(&p) == 0, "preset %u is not a patch", m + 1u);
         cr_synth_init(&S, DLY);
         use(&p);
         cr_synth_on(&S, 48, 100);
-        pk = run(22050, &rms);
+        pk = run(88200, &rms);                   /* 2 s: the slow pads swell in */
         cr_synth_off(&S, 48);
         (void)run(4410, 0);
         printf("     preset %2u %-11s peak %.2f rms %.3f\n", m + 1u, p.name, (double)pk, (double)rms);

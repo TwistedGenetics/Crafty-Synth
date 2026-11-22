@@ -16,7 +16,7 @@ python3 tools/gen_cr_font.py build/gen/cr_font.h >/dev/null
 [ -f build/gen/x0x/felucca_font.h ] || python3 x0x-firmware/tools/gen_font.py build/gen/x0x/felucca_font.h >/dev/null
 # the firmware's own rules: C99, no doubles anywhere (-Wdouble-promotion), every warning an error
 W="-O2 -std=c99 -Wall -Wextra -Werror -Wdouble-promotion -Wno-unused-function -Isrc/core -Isrc/dsp -Isrc/app -Ibuild/gen -Ibuild/gen/x0x"
-CORE="src/core/cr_patch.c src/core/cr_arp.c src/dsp/cr_synth.c src/dsp/cr_wt.c"
+CORE="src/core/cr_patch.c src/core/cr_arp.c src/dsp/cr_synth.c src/dsp/cr_wt.c src/dsp/cr_filter.c src/dsp/cr_fx.c"
 # shellcheck disable=SC2086
 $CC $W tests/host/synth_test.c $CORE -o build/host/synth_test
 build/host/synth_test build/host

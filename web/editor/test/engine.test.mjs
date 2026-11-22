@@ -13,7 +13,7 @@ test("every factory preset sounds in the WebAssembly engine", async () => {
   const mem = () => new Uint8Array(e.memory.buffer);
   const fac = e.cw_factory();
   for (let n = 0; n < 64; n++) {
-    mem().set(mem().slice(fac + n * 96, fac + n * 96 + 96), e.cw_patch());
+    mem().set(mem().slice(fac + n * 128, fac + n * 128 + 128), e.cw_patch());
     e.cw_apply();
     e.cw_key(48, 100);
     let peak = 0;

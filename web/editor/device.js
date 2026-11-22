@@ -5,7 +5,8 @@
 // Copyright (C) 2026 Jamie (TwistedGenetics).
 export const CMD = { INFO: 40, PGET: 41, PPUT: 42, SELECT: 43, GGET: 44, GPUT: 45, WPUT: 46, WCOMMIT: 47, EVT: 48,
   WGET: 49, PRESET_RESET: 50 };
-export const WORKING = 127, PATCH_BYTES = 96, UBANK_BYTES = 2576, CHUNK = 256;
+export const WORKING = 0x3fff, PATCH_BYTES = 128, UBANK_BYTES = 2576, CHUNK = 256, NFACTORY = 64, NUSER = 128, NUBANK = 32;
+const slot2 = (s) => [s & 0x7f, (s >> 7) & 0x7f];
 const HDR = [0xf0, 0x7d, 0x46, 0x4c];
 export const FM1_PORT = /fm-?1|crafty|felucca/i;
 
@@ -60,7 +61,7 @@ export class Device {
   recv(d) {
     if (d[0] === 0xf0 && d[1] === 0x7d && d[2] === 0x46 && d[3] === 0x4c) {
       const cmd = d[4], body = Array.from(d.slice(5, d.length - 1));
-      if (cmd === CMD.EVT) { if (this.onevent) this.onevent({ kind: body[0], cur: body[1], dirty: body[2] }); return; }
+      if (cmd === CMD.EVT) { if (this.onevent) this.onevent({ kind: body[0], cur: body[1] | (body[2] << 7), dirty: body[3] }); return; }
       const i = this.waiting.findIndex((w) => w.cmd === cmd);
       if (i >= 0) { const w = this.waiting.splice(i, 1)[0]; clearTimeout(w.timer); w.resolve(body); }
       return;
@@ -87,18 +88,23 @@ export class Device {
     let i = 0, name = "";
     while (i < b.length && b[i]) name += String.fromCharCode(b[i++]);
     i++;
-    return { name, proto: b[i], npreset: b[i + 1], cur: b[i + 2], dirty: b[i + 3], ubank: [b[i + 4], b[i + 5]] };
+    const proto = b[i];
+    if (proto < 2) throw new Error("This FM-1 runs an older Crafty Synth: install 0.4 or later with the flasher.");
+    const nbank = b[i + 7];
+    return { name, proto, nfactory: b[i + 1], nuser: b[i + 2] | (b[i + 3] << 7), cur: b[i + 4] | (b[i + 5] << 7),
+      dirty: b[i + 6], ubank: Array.from(b.slice(i + 8, i + 8 + nbank), (x) => !!x) };
   }
   async getPatch(slot) {
-    const b = await this.send(CMD.PGET, [slot]);
-    return { slot: b[0], saved: b[1], bytes: unpack7(b.slice(2), PATCH_BYTES) };
+    const b = await this.send(CMD.PGET, slot2(slot));
+    return { slot: b[0] | (b[1] << 7), saved: b[2], bytes: unpack7(b.slice(3), PATCH_BYTES) };
   }
   async putPatch(slot, bytes) {
-    const b = await this.send(CMD.PPUT, [slot, ...pack7(bytes)], 6000);
-    if (b[1] !== 0) throw new Error("the FM-1 couldn't write its flash");
+    const b = await this.send(CMD.PPUT, [...slot2(slot), ...pack7(bytes)], 6000);
+    if (b[2] === 2) throw new Error("factory presets can't be overwritten: save to a user slot (U1-1 and up)");
+    if (b[2] !== 0) throw new Error("the FM-1 couldn't write its flash");
   }
-  async select(slot) { await this.send(CMD.SELECT, [slot]); }
-  async resetPreset(slot) { await this.send(CMD.PRESET_RESET, [slot], 6000); }
+  async select(slot) { await this.send(CMD.SELECT, slot2(slot)); }
+  async resetPreset(slot) { await this.send(CMD.PRESET_RESET, slot2(slot), 6000); }
   async putBank(u, bytes) {
     for (let c = 0; c * CHUNK < bytes.length; c++)
       await this.send(CMD.WPUT, [u, c, ...pack7(bytes.slice(c * CHUNK, (c + 1) * CHUNK))]);

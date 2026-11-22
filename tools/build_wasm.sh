@@ -11,5 +11,5 @@ OUT="${1:-web/editor/crafty.wasm}"
 clang --target=wasm32 -O2 -std=c99 -ffreestanding -nostdlib -fvisibility=hidden -Wall -Wextra -Werror \
   -Wdouble-promotion -Wno-unused-function -Isrc/core -Isrc/dsp -Ibuild/gen \
   -Wl,--no-entry -Wl,--export-dynamic -Wl,--initial-memory=1048576 -Wl,--strip-all \
-  src/wasm/cr_wasm.c src/dsp/cr_synth.c src/dsp/cr_wt.c src/core/cr_patch.c src/core/cr_arp.c -o "$OUT"
+  src/wasm/cr_wasm.c src/dsp/cr_synth.c src/dsp/cr_wt.c src/dsp/cr_filter.c src/dsp/cr_fx.c src/core/cr_patch.c src/core/cr_arp.c -o "$OUT"
 echo "build_wasm: $OUT $(wc -c < "$OUT") B"

@@ -33,7 +33,7 @@ expect param.7 28
 shot waves.ppm
 # EDIT: the filter
 tap EDIT
-expect page 3
+expect page 4
 turn K1 -40
 expect param.12 87
 wait 1600
@@ -44,22 +44,22 @@ turn K1 10
 release LFO
 expect param.51 11
 expect param.43 74
-expect page 3
+expect page 4
 shot assign.ppm
 # ENV: the filter EG, again: the amp EG
 tap ENV
-expect page 4
-tap ENV
 expect page 5
+tap ENV
+expect page 6
 wait 1600
 shot amp_eg.ppm
 # LFO page, MATRIX page
 tap LFO
-expect page 7
+expect page 8
 wait 1600
 shot lfo.ppm
 tap SEL
-expect page 9
+expect page 10
 shot matrix.ppm
 # MIDI in: CC 34 (cutoff), program change, notes
 midi B0 22 30
@@ -87,7 +87,7 @@ wait 300
 expect arp 0
 # SEQ held + keys: a pattern of 3 and a rest
 tap SEQ
-expect page 13
+expect page 18
 press SEQ
 tapkey 0 50
 tapkey 3 50
@@ -95,7 +95,7 @@ tap REC
 tapkey 7 50
 release SEQ
 expect steps 4
-expect page 13
+expect page 18
 shot seq.ppm
 # latch: the note goes on after the key is let go
 tap ARP
@@ -107,23 +107,36 @@ wait 100
 expect gate 1
 tap REC
 expect gate 0
-# SAVE into 8-8, rename, reboot: it is there
+# SAVE: a factory preset saves into the first empty user slot (U1-1); further on, rename; reboot: it is there
 tap SAVE
-expect page 17
+expect page 22
 turn PRESET 99
 turn K4 3
 shot save.ppm
 tap SAVE
 expect dirty 0
-expect preset 63
+expect preset 163
+expect erases 1
 reboot
 wait 100
-expect preset 63
+expect preset 163
 expect steps 4
 # the editor: INFO, a patch read back
 sysex 28
 expect reply.0 67
-sysex 29 3F
+sysex 29 3F 00
 expect reply.0 63
+expect reply.1 0
+expect reply.2 1
+# the user slot saved above: U13-4 (163), saved
+sysex 29 23 01
+expect reply.0 35
 expect reply.1 1
+expect reply.2 1
+# a 0.3 store migrates once: its saved preset to U1-1, its user bank to bank 1
+oldstore
+reboot
+wait 100
+expect user1saved 33
+expect ubank1 1
 wavstop

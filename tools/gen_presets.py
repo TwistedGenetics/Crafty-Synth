@@ -3,7 +3,7 @@
 """FM1-Craft: the 64 factory presets (8 banks of 8, as the CRAFTsynth), written as values a person would set, turned
 into patch bytes here. The parameter table is read from src/core/cr_patch.c, so the two can't drift apart.
 
-    tools/gen_presets.py OUT.h          the C header (CR_FACTORY[64][96])
+    tools/gen_presets.py OUT.h          the C header (CR_FACTORY[64][128])
     tools/gen_presets.py --json OUT     the same for the editor (names, bytes)
 
 Copyright (C) 2026 Jamie (TwistedGenetics)."""
@@ -30,12 +30,23 @@ SRCS = ["LFO1", "LFO2", "MEG", "NOTE", "VELO", "MODW", "EXPR", "AFTT"]
 MODS = ["PM", "WSYNC", "RING", "TFOLD", "DEREZ", "ROR", "GLITCH", "WAMP", "FM", "HSYNC", "MIN", "SFOLD", "CRUSH",
         "SCRUNCH", "LOFI", "VOCAL"]
 BANKS = ["ANALOGUE", "DIGITAL1", "MATH", "POLYGON", "CURATED1", "FORMANT", "DIGITAL2", "CURATED2", "NOISE"]
+BMODES = ["FM", "PM", "SYNC", "RING", "FOLD"]
+FTYPES = ["SVF", "LADDER", "MS20", "TB303", "SEM", "STEINER", "POLIVOKS", "FORMANT", "COMB", "PHASER", "DUALPEAK",
+          "DECIMATOR"]
+VMODES = ["ROOM", "HALL", "HALO", "SWELL", "ABYSS", "DUB"]
+ERAS = ["OFF", "SP1200", "MPC60", "S950", "S1000", "AMIGA"]
+
+
+def band_val(i, n):
+    return (i * 128 + 64) // n
+
+
 SHAPES = {"UNISON": 0, "MAJOR": 67, "MINOR": 74, "MAJ6": 81, "SUS4": 88, "FIFTHS": 95, "FIFTHOCT": 102,
           "OCT12": 109, "OCT1M1": 116, "OCTM12": 124}
 
 
 def bank_val(b, wave2):
-    n = 11 if wave2 else 10
+    n = 41 if wave2 else 40
     i = b if wave2 or b < 8 else b - 1
     return (i * 128 + 64) // n
 
@@ -93,6 +104,16 @@ def preset(name, **kw):
             p[P["W2BANK"]] = bank_val(BANKS.index(v), True)
         elif k == "MODE":
             p[P["OMMODE"]] = MODS.index(v) * 8 + 4
+        elif k == "BMODE":
+            p[P["BMODE"]] = band_val(BMODES.index(v), 5)
+        elif k == "FTYPE":
+            p[P["FTYPE"]] = band_val(FTYPES.index(v), 12)
+        elif k == "VMODE":
+            p[P["VMODE"]] = band_val(VMODES.index(v), 6)
+        elif k == "ERA":
+            p[P["ERA"]] = band_val(ERAS.index(v), 6)
+        elif k in ("VMIX", "VDECAY", "VWARP", "VDENS", "VMOD", "CHMIX", "PHMIX", "CRUSH", "OTT"):
+            p[P[k]] = round(v * 127)
         elif k == "SHAPE":
             p[P["SPREAD"]] = SHAPES[v]
         elif k in ("FA", "FD", "FR", "AA", "AD", "AR", "MA", "MD", "MR"):
@@ -124,15 +145,15 @@ def preset(name, **kw):
         p[P["DEP0"] + i] = bip(depth)
         p[P["DST0"] + i] = D[dst]
     assert len(name) <= 11, name
-    b = bytearray(96)
+    b = bytearray(128)                       # cr_patch_t, version 2
     b[:len(name)] = name.encode()
     b[12:12 + len(p)] = bytes(p)
-    b[76] = len(steps)
-    b[77] = 0xC5
-    b[78] = 1
-    b[79] = root
+    b[108] = len(steps)
+    b[109] = 0xC5
+    b[110] = 2
+    b[111] = root
     for i, s in enumerate(steps):
-        b[80 + i] = 0 if s is None else 64 + s
+        b[112 + i] = 0 if s is None else 64 + s
     PRESETS.append((name, bytes(b)))
 
 
@@ -255,6 +276,43 @@ preset("RAVE SEQ", ARP=127, steps=[0, R, 0, R, 3, R, 0, 5], W1=5, W2=4, MIX=40, 
 
 assert len(PRESETS) == 64, len(PRESETS)
 
+# 0.4: the new filters and effects on the factory sounds they suit (added after, so the sounds above stay as made)
+EXTRA = {
+    "PWM LEAD": dict(CHMIX=0.45, CHRATE=30), "FM BELL": dict(VMODE="HALL", VMIX=0.3), "ROUND PAD": dict(CHMIX=0.5, VMODE="HALL", VMIX=0.35),
+    "RING BELLS": dict(VMODE="HALO", VMIX=0.35), "DREAD": dict(FTYPE="LADDER"), "DONK": dict(FTYPE="TB303"),
+    "REESE": dict(CHMIX=0.35, CHRATE=20, OTT=0.4), "ROLLER": dict(FTYPE="LADDER", OTT=0.3), "ACID": dict(FTYPE="TB303"),
+    "FM GROWL": dict(FTYPE="MS20", BMODE="FM", BAMT=40), "808 BOOM": dict(ERA="SP1200", CRUSH=0.2),
+    "HOOVER": dict(CHMIX=0.4, VMODE="ROOM", VMIX=0.2), "RAVE STAB": dict(ERA="SP1200", CRUSH=0.35, VMODE="ROOM", VMIX=0.2),
+    "PHRYG STAB": dict(VMODE="HALL", VMIX=0.25), "DUB SIREN": dict(VMODE="DUB", VMIX=0.35),
+    "NEURO": dict(FTYPE="DUALPEAK", OTT=0.6), "TECH STAB": dict(ERA="MPC60", CRUSH=0.3, VMODE="ROOM", VMIX=0.25),
+    "WOBBLE": dict(FTYPE="LADDER", OTT=0.5), "MIN REESE": dict(CHMIX=0.3, OTT=0.4),
+    "VOCAL LEAD": dict(FTYPE="FORMANT", MORPH=40, VMODE="HALL", VMIX=0.25), "FORMANTS": dict(VMODE="HALL", VMIX=0.3),
+    "CRUSH LEAD": dict(ERA="AMIGA", CRUSH=0.4), "GLIDE LEAD": dict(CHMIX=0.35, VMODE="HALL", VMIX=0.2),
+    "PPG SWEEP": dict(VMODE="HALO", VMIX=0.25), "SCREAMER": dict(FTYPE="MS20"), "WHISTLE": dict(VMODE="HALL", VMIX=0.3),
+    "POLY LEAD": dict(BMODE="PM", BAMT=30, CHMIX=0.3), "MAJOR STAB": dict(VMODE="ROOM", VMIX=0.25),
+    "MINOR STAB": dict(VMODE="HALL", VMIX=0.25, ERA="S950", CRUSH=0.25), "MAJ6 KEYS": dict(CHMIX=0.5, VMODE="HALL", VMIX=0.25),
+    "SUS STAB": dict(VMODE="ROOM", VMIX=0.3), "FIFTHS": dict(PHMIX=0.5, PHRATE=20), "ORGAN": dict(CHMIX=0.6, CHRATE=70),
+    "DETROIT": dict(VMODE="HALL", VMIX=0.2), "DUB CHORD": dict(VMODE="DUB", VMIX=0.3),
+    "DRONE": dict(VMODE="ABYSS", VMIX=0.45, PHMIX=0.4, PHRATE=10), "VOWEL PAD": dict(VMODE="SWELL", VMIX=0.45, CHMIX=0.4),
+    "GLASS DRONE": dict(VMODE="ABYSS", VMIX=0.5), "NOISE WIND": dict(FTYPE="COMB", MORPH=100, VMODE="HALL", VMIX=0.4),
+    "SLOW VOWELS": dict(FTYPE="FORMANT", VMODE="SWELL", VMIX=0.4), "DARK SWELL": dict(VMODE="ABYSS", VMIX=0.4, CHMIX=0.3),
+    "POLYGONS": dict(VMODE="HALL", VMIX=0.35, CHMIX=0.35), "SHIMMER": dict(VMODE="HALO", VMIX=0.5),
+    "WINDOW SYNC": dict(PHMIX=0.4), "ARP PLUCK": dict(VMODE="ROOM", VMIX=0.25), "PHRYG SEQ": dict(FTYPE="TB303", OTT=0.4),
+    "ACID SEQ": dict(FTYPE="TB303"), "DUB SEQ": dict(VMODE="DUB", VMIX=0.3), "BLIPS": dict(VMODE="HALO", VMIX=0.25),
+    "RAVE SEQ": dict(ERA="SP1200", CRUSH=0.3, VMODE="ROOM", VMIX=0.2),
+}
+for _i, (_n, _b) in enumerate(PRESETS):
+    if _n in EXTRA:
+        _p = bytearray(_b)
+        for _k, _v in EXTRA[_n].items():
+            if _k == "FTYPE": _p[12 + P["FTYPE"]] = band_val(FTYPES.index(_v), 12)
+            elif _k == "VMODE": _p[12 + P["VMODE"]] = band_val(VMODES.index(_v), 6)
+            elif _k == "ERA": _p[12 + P["ERA"]] = band_val(ERAS.index(_v), 6)
+            elif _k == "BMODE": _p[12 + P["BMODE"]] = band_val(BMODES.index(_v), 5)
+            elif isinstance(_v, float): _p[12 + P[_k]] = round(_v * 127)
+            else: _p[12 + P[_k]] = _v
+        PRESETS[_i] = (_n, bytes(_p))
+
 
 def meta():
     """the editor's tables: the parameters (from cr_patch.c), destinations, sources, banks, modifiers, presets"""
@@ -280,7 +338,7 @@ def main():
         Path(out).write_text(json.dumps([{"name": n, "bytes": list(b)} for n, b in PRESETS], separators=(",", ":")))
         return
     L = ["/* generated by tools/gen_presets.py: FM1-Craft's 64 factory presets (8 banks of 8) */", "#pragma once",
-         "#include <stdint.h>", "static const uint8_t CR_FACTORY[64][96] = {"]
+         "#include <stdint.h>", "static const uint8_t CR_FACTORY[64][128] = {"]
     for n, b in PRESETS:
         L.append(f"    {{{','.join(map(str, b))}}},   /* {n} */")
     L.append("};")

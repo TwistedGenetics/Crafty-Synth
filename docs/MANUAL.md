@@ -1,4 +1,4 @@
-# Crafty Synth manual (0.3)
+# Crafty Synth manual (0.4)
 
 Crafty Synth makes the M-VAVE FM-1 a monophonic wavetable synth after the Modal CRAFTsynth 2.0. This page covers the
 FM-1's panel. For what each part of the engine does, the CRAFTsynth 2.0 manual's "Synthesis engine" chapter applies
@@ -6,7 +6,7 @@ almost word for word; the differences are listed at the end.
 
 ## The screen
 
-- **Top band:** the preset (`3-1` is bank 3, slot 1) and its name; `*` means you've changed it since loading. On the
+- **Top band:** the preset (`3-1` is factory bank 3, slot 1; `U12-8` is user bank 12, slot 8) and its name; `*` means you've changed it since loading. On the
   right is the page you're on.
 - **Second line:** the oscillator modifier in use; on the right, `ARP` / `SEQ`, `LATCH` and the keys' octave.
 - **Middle:** a picture of the page: both waves on the OSC pages, the envelope, the LFO shape, or the filter's
@@ -17,7 +17,7 @@ almost word for word; the differences are listed at the end.
 
 | | |
 |---|---|
-| **PRESET** | Steps through the 64 presets (`1-1` … `8-8`); each one loads as you turn. On the SAVE page it picks the slot instead. |
+| **PRESET** | Steps through the 64 factory presets (`1-1` … `8-8`), then the 128 user slots (`U1-1` … `U16-8`); each one loads as you turn. On the SAVE page it picks the user slot instead. |
 | **SELECT** | Steps through the pages. |
 | **ALGO** | The oscillator modifier (one of 16), from any page. |
 | **K1–K4** | The four values on the page. A list (bank, modifier, mode) moves one choice per click. |
@@ -28,17 +28,22 @@ almost word for word; the differences are listed at the end.
 |---|---|---|
 | **HOME** | OSC | WAVE 1 · WAVE 2 · MIX · OSC MOD (the modifier's amount) |
 | | WAVES | BANK 1 · BANK 2 · MOD MODE · SPREAD |
+| | OSC B | B MODE · B MOD · WAVE 2 · TUNE |
 | | TUNE | TUNE (Wave 2, ±48 semitones) · FINE (Wave 2, ±100 cents) · OCTAVE · GLIDE |
-| **EDIT** | FILTER | CUTOFF · RESO · MORPH (LP → BP → HP) · FILT EG (bipolar) |
+| **EDIT** | FILTER | CUTOFF · RESO · MORPH (LP → BP → HP, or the type's own sweep) · TYPE |
 | **ENV** | FILTER EG → AMP EG → MOD EG | ATTACK · DECAY · SUSTAIN · RELEASE |
 | **LFO** | LFO 1 → LFO 2 | RATE · SHAPE · MODE (retrigger / free / single) · SYNC |
 | **SEL** | MATRIX | SOURCE · DEST · DEPTH |
 | **FX** | FX | DISTORT · DELAY (dry → wet) · TIME · FEEDBACK |
-| | OUTPUT | DELAY SYNC · VOLUME · AMP EG (amount, bipolar) · GLIDE |
+| | OUTPUT | DELAY SYNC · VOLUME · AMP EG (amount, bipolar) · FILT EG (bipolar) |
+| | REVERB | MODE · SIZE · DECAY · REVERB (dry → wet) |
+| | REVERB 2 | WARP · DENSITY · MOD · REVERB |
+| | MOD FX | CHORUS · CH RATE · PHASER · PH RATE |
+| | CRUSH | ERA · CRUSH · OTT · DISTORT |
 | **ARP** | turns the arp on or off, and shows ARP | ARP · TEMPO · RATE · STEPS |
 | **SEQ** | SEQ (the pattern) | STEPS · TEMPO · RATE · ARP |
 | **GLO** | MIDI → KEYS → SETUP | MIDI CH · MIDI IN · CLOCK · BEND / KEYS · SCALE · ROOT · VELO IN / LOCAL · BREATH · ARP OUT · THEME |
-| **SAVE** | SAVE | SLOT · – · LETTER · CHAR |
+| **SAVE** | SAVE | USER SLOT · – · LETTER · CHAR |
 | **REC** | | LATCH on / off |
 | **PLAY** | | all notes off (on the SAVE page: INIT, a plain saw patch) |
 | **OCT− / OCT+** | | the keys' octave, −3 … +3 |
@@ -74,17 +79,50 @@ middle across its whole range; the other sources sweep a value set at 0 across i
 mod EG can't modulate their own settings. Mod wheel (CC 1), expression (CC 11), aftertouch and velocity come from MIDI
 in; breath (CC 2) can stand in for any of the three (GLO → SETUP → BREATH).
 
+## OSC B
+
+OSC B's own modifier works alongside the 16 on OSC A. **B MODE**: OFF, FM (A's output bends B's pitch), PM (A pushes
+B's phase), SYNC (A restarts B; B MOD shifts B up for the classic sweep), RING (B times A), FOLD (B folds over itself).
+**B MOD** is the amount; it is also a matrix destination, so an LFO or the mod EG can sweep it.
+
+## Filter types
+
+**TYPE** picks one of 12 filters; **MORPH** still sweeps each one:
+
+- **SVF, MS-20, STEINER**: low pass → band pass → high pass (MS-20 screams, Steiner is rough).
+- **LADDER, TB-303**: four mixes of the ladder's stages, Xpander-style; the 303 is the squelchy diode version.
+- **SEM**: low pass → notch → high pass. **POLIVOKS**: gritty low pass → band pass.
+- **FORMANT**: through the vowels; CUTOFF shifts them, RESO narrows them.
+- **COMB +/-**: negative to positive feedback, tuned by CUTOFF.
+- **PHASER**: 2 to 12 notches. **DUAL PEAK**: two resonant peaks pulling apart.
+- **DECIMATOR**: a filter, then bit reduction from 16 bits down to 3.
+
+## Effects
+
+In order: filter → distortion → EraCrush → amp → phaser → delay → chorus → reverb → OTT.
+
+- **REVERB** (Horizon): six modes. ROOM and HALL are plain; HALO shimmers; SWELL fades in; ABYSS and DUB run nearly
+  endless. SIZE, DECAY (0.3–30 s), WARP (the tail's darkness and pitch drift), DENSITY (from echoes to smooth wash), MOD.
+- **CHORUS** and **PHASER**, each with an amount and a rate.
+- **ERA** picks a sampler (SP-1200, MPC60, S950, S1000, AMIGA) and **CRUSH** how hard; OFF bypasses it.
+- **OTT**: three-band upward and downward compression, as the plugin.
+
+Each effect costs nothing when its amount is 0. GLO → SETUP shows the CPU load; if it reaches 90%, ease off the
+heaviest (reverb, then OTT).
+
 ## Presets and saving
 
-There are 64 slots. Until you save over a slot it holds its factory preset. **SAVE** opens the save page: pick the slot
-(PRESET or K1), and rename with K3 (which letter) and K4 (the character). Press **SAVE** again to write it. Any other
-button cancels. From the editor you can put a slot back to its factory preset.
+There are 64 **factory presets** (`1-1` … `8-8`), which stay as they are, and 128 **user slots** (`U1-1` … `U16-8`).
+**SAVE** opens the save page on the user slot you're on, or the first empty one if you came from a factory preset. Pick
+the slot (PRESET or K1), and rename with K3 (which letter) and K4 (the character). Press **SAVE** again to write it.
+Any other button cancels. An empty user slot loads as INIT; the editor can empty a slot. Presets saved with 0.1–0.3
+are moved to U1-1 onward the first time 0.4 starts. Program change 0–63 loads the factory presets, 64–127 U1-1 … U8-8.
 
 ## User wavetables
 
-Banks 10 and 11 (USER 1 and USER 2) are yours. In the editor, open a WAV in **User wavetables** (Serum and Vital tables,
+Banks 10 to 41 (USER 1 … USER 32) are yours. In the editor, open a WAV in **User wavetables** (Serum and Vital tables,
 or any single cycle) and choose which five of its frames become the five waves. You hear the result straight away;
-**Send to FM-1** stores it. Each user bank is shared by every patch that uses it. Until you fill one, it plays bank 1.
+**Send to FM-1** stores it. Each user bank is shared by every patch that uses it. Until you fill one, it plays bank 1. 0.1–0.3's two user banks become USER 1 and USER 2.
 
 ## MIDI
 
@@ -96,7 +134,10 @@ keeps the keys off the internal synth.
 
 ## What differs from a CRAFTsynth 2.0
 
-- The wavetables are Crafty Synth's own (same bank layout and character); two user banks are added.
+- The wavetables are Crafty Synth's own (same bank layout and character); 32 user banks are added.
+- Added beyond the CRAFTsynth: OSC B's modifier, 12 filter types, reverb, chorus, phaser, EraCrush, OTT, and 128 user
+  preset slots.
+- The delay goes to about 0.74 s (the CRAFTsynth's is longer).
 - The 8 touch pads and their scale system become the FM-1's 27 keys (chromatic, or scale mode).
 - Mod destination 24 ("MEG Amount" in the CRAFTsynth's list) is VOLUME here: the mod EG's depth has its own
   destination (MEG DEP), so there is no duplicate.
