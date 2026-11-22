@@ -127,8 +127,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: The editor's engine (the firmware's C as WebAssembly)
         run: |
+          pip install numpy
           command -v wasm-ld >/dev/null || sudo apt-get install -y lld
           sh tools/build_wasm.sh
       - name: Editor and flasher tests
