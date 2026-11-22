@@ -74,9 +74,13 @@ MIDI clock when one arrives (GLO → CLOCK: AUTO / INT / MIDI).
 
 ## The matrix
 
-Each of the 8 sources has one slot: a destination and a bipolar depth. At full depth an LFO sweeps a value set at its
-middle across its whole range; the other sources sweep a value set at 0 across its whole range. LFO 1, LFO 2 and the
-mod EG can't modulate their own settings. Mod wheel (CC 1), expression (CC 11), aftertouch and velocity come from MIDI
+Each of the 8 sources has one slot: a destination and a bipolar depth. **Every patch value is a destination** (74 in
+all; only the matrix's own destination choices aren't): besides the CRAFTsynth's 43, the wavetable banks, modifier and
+B modes, tune, fine and octave, the LFOs' modes and sync, delay sync, the other five sources' depths, the arp-seq's
+on/off, tempo and rate, the filter type, every reverb setting, the chorus and phaser rates and the crush era. A
+stepped value (a bank, a type, a mode) steps through its choices as the source moves. At full depth an LFO sweeps a
+value set at its middle across its whole range; the other sources sweep a value set at 0 across its whole range.
+LFO 1, LFO 2 and the mod EG can't modulate their own settings, and no source its own depth. Mod wheel (CC 1), expression (CC 11), aftertouch and velocity come from MIDI
 in; breath (CC 2) can stand in for any of the three (GLO → SETUP → BREATH).
 
 ## OSC B

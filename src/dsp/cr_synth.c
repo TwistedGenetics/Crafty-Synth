@@ -18,7 +18,23 @@ static const int8_t DEST_P[CR_ND] = {
     -1, CR_W1POS, CR_W2POS, CR_MIX, -1, -1, CR_OMAMT, CR_L1RATE, CR_L2RATE, CR_L1SHAPE, CR_L2SHAPE, CR_CUT, CR_RES,
     CR_MORPH, CR_FEGAMT, CR_FA, CR_FD, CR_FS, CR_FR, CR_AEGAMT, CR_AA, CR_AD, CR_AS, CR_AR, CR_VOL, CR_MA, CR_MD,
     CR_MS, CR_MR, CR_DIST, CR_DMIX, CR_DTIME, CR_DFB, CR_SPREAD, CR_GLIDE, CR_DEP0, CR_DEP1, CR_DEP2,
-    CR_BAMT, CR_VMIX, CR_CHMIX, CR_PHMIX, CR_CRUSH, CR_OTT};
+    CR_BAMT, CR_VMIX, CR_CHMIX, CR_PHMIX, CR_CRUSH, CR_OTT,
+    CR_W1BANK, CR_W2BANK, CR_OMMODE, CR_TUNE, CR_FINE, CR_OCT, CR_L1MODE, CR_L1SYNC, CR_L2MODE, CR_L2SYNC, CR_DSYNC,
+    CR_DEP3, CR_DEP4, CR_DEP5, CR_DEP6, CR_DEP7, CR_ARP, CR_TEMPO, CR_ARPRATE, CR_BMODE, CR_FTYPE, CR_VMODE, CR_VSIZE,
+    CR_VDECAY, CR_VWARP, CR_VDENS, CR_VMOD, CR_CHRATE, CR_PHRATE, CR_ERA};
+_Static_assert(sizeof DEST_P / sizeof DEST_P[0] == CR_ND, "a parameter for every destination");
+
+/* a destination's value after the matrix as a patch value 0..127 (the stepped ones: banks, modes, types) */
+static uint32_t er(const cr_synth_t *s, uint32_t d) { return (uint32_t)(s->eff[d] * 127.f + 0.5f); }
+/* which source's depth a destination is (-1: none) */
+static int32_t dep_of(uint32_t d)
+{
+    if (d >= CR_D_L1DEP && d <= CR_D_MEGDEP)
+        return (int32_t)(d - CR_D_L1DEP);
+    if (d >= CR_D_NOTEDEP && d <= CR_D_AFTTDEP)
+        return (int32_t)(d - CR_D_NOTEDEP) + CR_S_NOTE;
+    return -1;
+}
 
 /* SPREAD's chord shapes: semitones of the four pairs (a few cents apart, so they beat a little) */
 static const float SHAPE[10][4] = {
@@ -74,6 +90,31 @@ void cr_synth_param(cr_synth_t *s, uint32_t id, uint32_t v)
     s->base[id] = (float)(v & 0x7Fu) * (1.f / 127.f);
     if (id >= CR_DST0 && id <= CR_DST7 && (s->raw[id] >= CR_ND || !cr_dest_ok(id - CR_DST0, s->raw[id])))
         s->raw[id] = CR_D_NONE;
+    {   /* the destination's value until the next control block works it out with the matrix */
+        uint32_t d;
+        for (d = 1; d < CR_ND; d++)
+            if (DEST_P[d] == (int8_t)id)
+                s->eff[d] = s->base[id];
+    }
+}
+
+void cr_synth_arp_view(const cr_synth_t *s, const cr_patch_t *p, cr_patch_t *out)
+{
+    *out = *p;
+    out->p[CR_ARP] = (uint8_t)er(s, CR_D_ARP);
+    out->p[CR_TEMPO] = (uint8_t)er(s, CR_D_TEMPO);
+    out->p[CR_ARPRATE] = (uint8_t)er(s, CR_D_ARPRATE);
+}
+
+uint32_t cr_synth_eff(const cr_synth_t *s, uint32_t id)
+{
+    uint32_t d;
+    if (id >= CR_NP)
+        return 0;
+    for (d = 1; d < CR_ND; d++)
+        if (DEST_P[d] == (int8_t)id)
+            return er(s, d);
+    return s->raw[id];
 }
 
 void cr_synth_patch(cr_synth_t *s, const cr_patch_t *p)
@@ -110,7 +151,7 @@ static void trigger(cr_synth_t *s)
     for (i = 0; i < 3u; i++)
         s->env[i].st = 1;              /* from where it is: no click */
     for (i = 0; i < 2u; i++) {
-        uint32_t m = s->raw[i ? CR_L2MODE : CR_L1MODE];
+        uint32_t m = er(s, i ? CR_D_L2MODE : CR_D_L1MODE);
         if (m < 42u || m >= 84u) {     /* retrigger, single: from the start */
             s->lph[i] = 0.f;
             s->lstop[i] = 0.f;
@@ -235,7 +276,7 @@ static float lfo_shape(cr_synth_t *s, uint32_t i, float sh)
 
 static float lfo_hz(cr_synth_t *s, uint32_t i, float r)
 {
-    uint32_t sync = s->raw[i ? CR_L2SYNC : CR_L1SYNC] >= 64u;
+    uint32_t sync = er(s, i ? CR_D_L2SYNC : CR_D_L1SYNC) >= 64u;
     if (!i)
         return sync ? L1_SYNC[(uint32_t)(r * 15.99f)] * s->tempo * (1.f / 240.f)
                     : 0.02f * cr_exp2f(r * 10.64f);
@@ -268,7 +309,7 @@ static void control(cr_synth_t *s)
             if (s->lph[i] >= 1.f) {
                 s->lph[i] -= (float)(int32_t)s->lph[i];
                 s->lsh[i] = rndf(s);
-                if (s->raw[i ? CR_L2MODE : CR_L1MODE] >= 84u) {   /* single: one cycle, then it stays */
+                if (er(s, i ? CR_D_L2MODE : CR_D_L1MODE) >= 84u) {   /* single: one cycle, then it stays */
                     s->lph[i] = 0.9999f;
                     s->lstop[i] = 1.f;
                 }
@@ -291,9 +332,9 @@ static void control(cr_synth_t *s)
     for (i = 0; i < CR_NSRC; i++)
         dep[i] = (float)((int32_t)s->raw[CR_DEP0 + i] - 64) * (1.f / 63.f);
     for (i = 0; i < CR_NSRC; i++) {
-        d = s->raw[CR_DST0 + i];
-        if (d >= CR_D_L1DEP && d <= CR_D_MEGDEP) {
-            float *t = &dep[d - CR_D_L1DEP];
+        int32_t k = dep_of(s->raw[CR_DST0 + i]);
+        if (k >= 0) {
+            float *t = &dep[k];
             *t += src[i] * dep[i] * 2.f;
             *t = *t < -1.f ? -1.f : *t > 1.f ? 1.f : *t;
         }
@@ -320,9 +361,9 @@ static void control(cr_synth_t *s)
     {
         uint32_t sp = (uint32_t)(e[CR_D_SPREAD] * 127.f + 0.5f), shape = cr_spread_shape(sp), oct;
         float n1, n2, off[4], u;
-        oct = ((uint32_t)s->raw[CR_OCT] * 7u) >> 7;
+        oct = (er(s, CR_D_OCT) * 7u) >> 7;
         n1 = s->pitch + 12.f * ((float)oct - 2.f) + s->bend + (e[CR_D_PITCH] - 0.5f) * 48.f;
-        n2 = n1 + (float)cr_semi_of(s->raw[CR_TUNE]) + (s->base[CR_FINE] - 0.5f) * 2.f * (127.f / 126.f) +
+        n2 = n1 + (float)cr_semi_of(er(s, CR_D_TUNE)) + (e[CR_D_FINE] - 0.5f) * 2.f * (127.f / 126.f) +
              (e[CR_D_O2PITCH] - 0.5f) * 48.f;
         if (shape) {
             for (i = 0; i < 4u; i++)
@@ -360,7 +401,7 @@ static void control(cr_synth_t *s)
     /* the filter (its type, cutoff with the filter EG, resonance, morph) */
     {
         float cut = clamp01(e[CR_D_CUT] + (e[CR_D_FEGAMT] - 0.5f) * 2.f * s->env[0].lv);
-        cr_filt_set(&s->filt, cr_band(s->raw[CR_FTYPE], CR_NFTYPE), 20.f * cr_exp2f(cut * 10.f), e[CR_D_RES], e[CR_D_MORPH]);
+        cr_filt_set(&s->filt, cr_band(er(s, CR_D_FTYPE), CR_NFTYPE), 20.f * cr_exp2f(cut * 10.f), e[CR_D_RES], e[CR_D_MORPH]);
     }
     /* the amp: AMP EG amount (bipolar; at 0 it drones) times the volume */
     {
@@ -378,7 +419,7 @@ static void control(cr_synth_t *s)
         float d = e[CR_D_DIST];
         s->dist_g = 1.f + 30.f * d * d;
         s->dist_mix = d * 8.f > 1.f ? 1.f : d * 8.f;
-        if (s->raw[CR_DSYNC] >= 64u)
+        if (er(s, CR_D_DSYNC) >= 64u)
             s->dl_target = D_SYNC[(uint32_t)(e[CR_D_DTIME] * 8.99f)] * 60.f / s->tempo * FS;
         else
             s->dl_target = 0.0005f * cr_exp2f(e[CR_D_DTIME] * 10.55f) * FS;
@@ -389,9 +430,9 @@ static void control(cr_synth_t *s)
         s->dl_fb = e[CR_D_DFB] * 0.9f;
         s->dl_mix = e[CR_D_DMIX];
     }
-    cr_fx_set(&s->fx, cr_band(s->raw[CR_ERA], 6), e[CR_D_CRUSH], e[CR_D_PHMIX], s->base[CR_PHRATE], e[CR_D_CHMIX],
-              s->base[CR_CHRATE], cr_band(s->raw[CR_VMODE], 6), s->base[CR_VSIZE], s->base[CR_VDECAY], e[CR_D_VMIX],
-              s->base[CR_VWARP], s->base[CR_VDENS], s->base[CR_VMOD], e[CR_D_OTT]);
+    cr_fx_set(&s->fx, cr_band(er(s, CR_D_ERA), 6), e[CR_D_CRUSH], e[CR_D_PHMIX], e[CR_D_PHRATE], e[CR_D_CHMIX],
+              e[CR_D_CHRATE], cr_band(er(s, CR_D_VMODE), 6), e[CR_D_VSIZE], e[CR_D_VDECAY], e[CR_D_VMIX],
+              e[CR_D_VWARP], e[CR_D_VDENS], e[CR_D_VMOD], e[CR_D_OTT]);
 }
 
 /* ------------------------------------------------------------------------------------------ the samples --- */
@@ -450,14 +491,14 @@ void cr_synth_render(cr_synth_t *s, float *lr, uint32_t n)
         wb2 = wa2 + 1u;
         mix = e[CR_D_MIX];
         a = e[CR_D_OMAMT];
-        om = cr_om_of(s->raw[CR_OMMODE]);
+        om = cr_om_of(er(s, CR_D_OMMODE));
         ratio = 1.f + a * 7.f;
         crush_l = cr_exp2f(15.f - 14.f * a);
         ncol = e[CR_D_W2] < 0.5f ? 0.03f : 0.03f + 0.97f * (e[CR_D_W2] - 0.5f) * 2.f;
         ngain = cr_exp2f(-0.5f * cr_log2f(ncol)) * 0.6f;
         amp0 = s->amp_prev;
         damp = (s->amp - amp0) / (float)len;
-        bm = cr_band(s->raw[CR_BMODE], 5);       /* OSC B's modifier: A's last sample modulates B */
+        bm = cr_band(er(s, CR_D_BMODE), 5);       /* OSC B's modifier: A's last sample modulates B */
         ba = e[CR_D_BAMT];
         bsync = 1.f + ba * 3.f;                  /* SYNC TO A: B up to 2 octaves above, restarted with A */
         np = s->npair;

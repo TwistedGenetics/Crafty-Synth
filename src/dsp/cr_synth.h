@@ -63,6 +63,11 @@ typedef struct {
 void cr_synth_init(cr_synth_t *s, int16_t *mem /* CR_SYN_MEM */);
 void cr_synth_patch(cr_synth_t *s, const cr_patch_t *p);       /* all of a patch's values */
 void cr_synth_param(cr_synth_t *s, uint32_t id, uint32_t v);   /* one value (a knob, a CC) */
+/* a parameter's value after the mod matrix, 0..127 (for what the host runs outside the synth: the wavetable banks it
+ * builds, the arp-seq's on/off, tempo and rate) */
+uint32_t cr_synth_eff(const cr_synth_t *s, uint32_t id);
+/* the patch as the arp-seq should see it: ARP, TEMPO and ARPRATE after the matrix */
+void cr_synth_arp_view(const cr_synth_t *s, const cr_patch_t *p, cr_patch_t *out);
 void cr_synth_tables(cr_synth_t *s, const cr_wtbank_t *w1, const cr_wtbank_t *w2, int w2_noise);
 void cr_synth_tempo(cr_synth_t *s, float bpm);
 void cr_synth_on(cr_synth_t *s, uint32_t note, uint32_t vel);

@@ -101,7 +101,9 @@ const char *const CR_DEST_NAME[CR_ND] = {
     "L2 SHAPE", "CUTOFF", "RESO", "MORPH", "FEG AMT", "FEG A", "FEG D", "FEG S", "FEG R", "AEG AMT", "AEG A",
     "AEG D", "AEG S", "AEG R", "VOLUME", "MEG A", "MEG D", "MEG S", "MEG R", "DISTORT", "DELAY", "DLY TIME",
     "DLY FB", "SPREAD", "GLIDE", "L1 DEPTH", "L2 DEPTH", "MEG DEP", "B MOD", "REVERB", "CHORUS", "PHASER", "CRUSH",
-    "OTT"};
+    "OTT", "BANK 1", "BANK 2", "MOD MODE", "TUNE", "FINE", "OCTAVE", "L1 MODE", "L1 SYNC", "L2 MODE", "L2 SYNC",
+    "DLY SYNC", "NOTE DEP", "VELO DEP", "MODW DEP", "EXPR DEP", "AFTT DEP", "ARP", "TEMPO", "ARP RATE", "B MODE",
+    "FLT TYPE", "VRB MODE", "VRB SIZE", "VRB DCAY", "VRB WARP", "VRB DENS", "VRB MOD", "CH RATE", "PH RATE", "ERA"};
 const char *const CR_SRC_NAME[CR_NSRC] = {"LFO 1", "LFO 2", "MOD EG", "NOTE", "VELO", "MOD WHL", "EXPR", "AFTTCH"};
 const char *const CR_OM_NAME[CR_NOM] = {
     "PHASE MOD", "WINDOW SYNC", "RING MOD", "TRI FOLD", "DE-REZ", "RISE/RUN", "GLITCH SINE", "WINDOW AMP",
@@ -285,10 +287,10 @@ uint32_t cr_spread_shape(uint32_t v)
 int cr_dest_ok(uint32_t src, uint32_t dst)
 {
     if (src == CR_S_LFO1)
-        return dst != CR_D_L1RATE && dst != CR_D_L1SHAPE && dst != CR_D_L1DEP;
+        return dst != CR_D_L1RATE && dst != CR_D_L1SHAPE && dst != CR_D_L1DEP && dst != CR_D_L1MODE && dst != CR_D_L1SYNC;
     if (src == CR_S_LFO2)
-        return dst != CR_D_L2RATE && dst != CR_D_L2SHAPE && dst != CR_D_L2DEP;
+        return dst != CR_D_L2RATE && dst != CR_D_L2SHAPE && dst != CR_D_L2DEP && dst != CR_D_L2MODE && dst != CR_D_L2SYNC;
     if (src == CR_S_MEG)
         return !(dst >= CR_D_MA && dst <= CR_D_MR) && dst != CR_D_MEGDEP;
-    return 1;
+    return dst != CR_D_NOTEDEP + (src - CR_S_NOTE);   /* no source modulates its own depth */
 }

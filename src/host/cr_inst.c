@@ -84,8 +84,8 @@ static const int16_t (*bank_base(const cr_inst_t *in, uint32_t b))[CR_WT_N]
 static void tables(cr_inst_t *in)
 {
     uint32_t want[2], k;
-    want[0] = cr_bank_of(in->p.p[CR_W1BANK], 0);
-    want[1] = cr_bank_of(in->p.p[CR_W2BANK], 1);
+    want[0] = cr_bank_of(cr_synth_eff(&in->syn, CR_W1BANK), 0);   /* the banks as the matrix leaves them */
+    want[1] = cr_bank_of(cr_synth_eff(&in->syn, CR_W2BANK), 1);
     for (k = 0; k < 2u; k++)
         if (in->tb[k] != want[k]) {
             cr_wt_build(&in->tab[k], bank_base(in, want[k]));
@@ -157,7 +157,7 @@ void cr_inst_param(cr_inst_t *in, uint32_t id, uint32_t v)
 /* ---- notes ---- */
 static void play(cr_inst_t *in, uint32_t n, uint32_t v)
 {
-    if (in->p.p[CR_ARP] >= 64u)
+    if (cr_synth_eff(&in->syn, CR_ARP) >= 64u)
         cr_arp_key(&in->arp, n, v);
     else if (v)
         cr_synth_on(&in->syn, n, v);
@@ -265,25 +265,28 @@ void cr_inst_transport(cr_inst_t *in, double ppq, float bpm, int playing)
 }
 void cr_inst_render(cr_inst_t *in, float *lr, uint32_t n)
 {
+    cr_patch_t ap;                              /* the patch as the arp-seq sees it (TEMPO, RATE, ARP modulated) */
     if (n > CR_INST_FRAMES)
         n = CR_INST_FRAMES;
+    tables(in);                                 /* a bank the matrix moved */
+    cr_synth_arp_view(&in->syn, &in->p, &ap);
     if (in->playing && in->ppq >= 0.0 && in->bpm > 0.f) {
         /* locked to the host: MIDI-clock ticks (24 a beat) placed from its song position, a step on each multiple */
         double end = in->ppq + (double)n * (double)in->bpm / (60.0 * (double)CR_INST_RATE);
-        int64_t last = (int64_t)(end * 24.0), t = cr_arp_ticks(&in->p);
+        int64_t last = (int64_t)(end * 24.0), t = cr_arp_ticks(&ap);
         int64_t k = in->tick < 0 || in->tick > last || last - in->tick > 96 ? (int64_t)(in->ppq * 24.0) - 1 : in->tick;
         for (k++; k <= last; k++) {
             if (k < 0)
                 continue;
             in->arp.ticks = (uint32_t)((k + t - 1) % t);   /* so the step falls on k % t == 0 */
-            cr_arp_clock(&in->arp, &in->p);
+            cr_arp_clock(&in->arp, &ap);
         }
         in->tick = last;
         in->arp.bpm = in->bpm;
     } else {
         in->arp.bpm = in->bpm;
-        cr_arp_run(&in->arp, &in->p, n);
+        cr_arp_run(&in->arp, &ap, n);
     }
-    cr_synth_tempo(&in->syn, in->bpm > 0.f ? in->bpm : cr_arp_bpm(&in->p));
+    cr_synth_tempo(&in->syn, in->bpm > 0.f ? in->bpm : cr_arp_bpm(&ap));
     cr_synth_render(&in->syn, lr, n);
 }

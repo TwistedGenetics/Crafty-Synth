@@ -83,3 +83,12 @@ a { color: var(--acc); }
 
 /* inside the AU / VST3 plugin: the host plays the sound and the plugin is always "connected" */
 body.plugin #audio, body.plugin #connect, body.plugin .meter, body.plugin a[href*="flasher"] { display: none; }
+/* the plugin's window: a fixed layout width, zoomed to fit (app.js applyScale) */
+body.plugin { margin: 0 auto; }
+
+/* the plugin's pages: one row of panels at a time (app.js buildPages) */
+nav.pages { display: none; }
+body.plugin nav.pages { display: flex; gap: 6px; margin: 8px 12px 0; }
+body.plugin nav.pages button { flex: 1; font-size: 16px; padding: 10px 6px; }
+body.plugin nav.pages button.on { background: var(--acc); color: var(--panel); }
+body.plugin [data-page]:not(.on) { display: none; }

@@ -351,7 +351,8 @@ const juce::String CraftyProcessor::getProgramName(int index)
 }
 
 // --------------------------------------------------------------------------------------------- state ---
-// "CRS1", the preset it came from (2 bytes), dirty, 0, then the patch (128 bytes) and the globals (16)
+// "CRS1", the preset it came from (2 bytes), dirty, 0, then the patch (128 bytes), the globals (16) and the window:
+// "UI", its width and height (2 bytes each, little-endian) and the SIZE choice (a 0-terminated string)
 void CraftyProcessor::getStateInformation(juce::MemoryBlock &dest)
 {
     const juce::ScopedLock sl(lock);
@@ -359,6 +360,10 @@ void CraftyProcessor::getStateInformation(juce::MemoryBlock &dest)
     dest.append(h, sizeof h);
     dest.append(&inst->p, CR_PATCH_BYTES);
     dest.append(&inst->g, sizeof inst->g);
+    const uint8_t ui[6] = {'U', 'I', (uint8_t)(editorW & 0xFF), (uint8_t)(editorW >> 8), (uint8_t)(editorH & 0xFF),
+                           (uint8_t)(editorH >> 8)};
+    dest.append(ui, sizeof ui);
+    dest.append(uiScale.toRawUTF8(), uiScale.getNumBytesAsUTF8() + 1);
 }
 void CraftyProcessor::setStateInformation(const void *data, int size)
 {
@@ -375,11 +380,23 @@ void CraftyProcessor::setStateInformation(const void *data, int size)
         cr_inst_use(inst.get(), &p);
         inst->cur = (uint16_t)((d[4] | d[5] << 8) % CR_NPRESET);
         inst->dirty = d[6];
-        if (size >= 8 + (int)CR_PATCH_BYTES + (int)sizeof(cr_globals_t)) {
+        const int gat = 8 + (int)CR_PATCH_BYTES, uat = gat + (int)sizeof(cr_globals_t);
+        if (size >= uat) {
             cr_globals_t g;
-            std::memcpy(&g, d + 8 + CR_PATCH_BYTES, sizeof g);
+            std::memcpy(&g, d + gat, sizeof g);
             if (cr_globals_check(&g) == 0)
                 inst->g = g;
+        }
+        if (size >= uat + 7 && d[uat] == 'U' && d[uat + 1] == 'I') {   /* the window (0.8 on) */
+            editorW = juce::jlimit(600, 4000, d[uat + 2] | d[uat + 3] << 8);
+            editorH = juce::jlimit(400, 3000, d[uat + 4] | d[uat + 5] << 8);
+            const char *t = (const char *)d + uat + 6;
+            int n = 0;
+            while (n < 16 && uat + 6 + n < size && t[n])
+                n++;
+            uiScale = juce::String::fromUTF8(t, n);
+            if (uiScale.isEmpty())
+                uiScale = "whole";
         }
     }
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())

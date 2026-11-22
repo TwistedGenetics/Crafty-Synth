@@ -21,6 +21,9 @@ an instance, and the editor protocol for the plugins), `web/editor` (the web edi
      (`tools/gen_presets.py --meta web/editor/meta.js`, its panel in `web/editor/app.js`), the MPC
      (`python3 ports/mpc/make_port.py`, and a page for it in `ports/mpc/gen_params.c`'s `SECTIONS`). The AU / VST3
      picks it up by itself (its parameters come from `cr_patch.h` and `cr_keys.h`).
+   - Every parameter is also a mod destination: append a `CR_D_` (cr_patch.h), its name (`CR_DEST_NAME`), its
+     parameter in `DEST_P` (cr_synth.c), and read it in the engine through the matrix (`e[]`, or `er()` for a stepped
+     value), never `raw[]` / `base[]`.
    - Rebuild the editor's engine (`sh tools/build_wasm.sh`) whenever `src/core`, `src/dsp` or `src/host` changed.
 3. **Bump `VERSION`** for anything that should be released. A push to `main` builds the FM-1 first; the plugin and
    MPC jobs only run once it has passed (`needs: firmware`), and one release `vX.Y` carries all three, the FM-1's

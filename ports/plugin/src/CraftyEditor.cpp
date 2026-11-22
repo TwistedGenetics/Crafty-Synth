@@ -46,6 +46,11 @@ CraftyEditor::CraftyEditor(CraftyProcessor &p)
               .withNativeIntegrationEnabled()
               .withKeepPageLoadedWhenBrowserIsHidden()
               .withResourceProvider(resource)
+              .withInitialisationData("uiScale", p.uiScale)
+              .withEventListener("crafty-ui", [this](const juce::var &v) {   // the editor's SIZE choice
+                  if (auto *o = v.getDynamicObject())
+                      proc.uiScale = o->getProperty("scale").toString();
+              })
               .withEventListener("crafty-midi", [this](const juce::var &v) {
                   std::vector<uint8_t> f;
                   if (auto *a = v.getArray())
@@ -61,12 +66,17 @@ CraftyEditor::CraftyEditor(CraftyProcessor &p)
             a.add((int)b);
         web.emitEventIfBrowserIsVisible("crafty-midi", juce::var(a));
     };
-    setResizable(true, true);
-    setResizeLimits(760, 520, 2400, 1800);
-    setSize(1240, 860);
+    setResizable(true, true);                       // drag the corner: the editor zooms to fit (its SIZE menu)
+    setResizeLimits(600, 400, 4000, 3000);
+    setSize(proc.editorW, proc.editorH);
     web.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 }
 
 CraftyEditor::~CraftyEditor() { proc.toEditor = nullptr; }
 
-void CraftyEditor::resized() { web.setBounds(getLocalBounds()); }
+void CraftyEditor::resized()
+{
+    web.setBounds(getLocalBounds());
+    proc.editorW = getWidth();
+    proc.editorH = getHeight();
+}

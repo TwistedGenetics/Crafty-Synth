@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8 beta (2026-11-22)
+
+- **Every parameter is a mod destination** (74, was 44), on the FM-1, the editor, the plugin and the MPC: banks,
+  modes, tune / fine / octave, LFO modes and sync, delay sync, every source's depth, the arp-seq's on/off, tempo and
+  rate, filter type, all of the reverb, chorus and phaser rates, crush era. Stepped values step as the source moves;
+  a modulated bank is built as if it had been turned. Old patches keep their destinations.
+- **Name your presets** in the editor and the plugin: NAME, beside SAVE (the FM-1 names them on its SAVE page).
+- **The plugin's window scales**: pages like the FM-1's, the keyboard always in view, SIZE (WHOLE / WIDTH /
+  60-150%), a resizable window, both kept with the project.
+
 ## 0.7 beta (2026-11-22)
 
 - **MPC: Akai's official plugin format (MPC OS 3.10.1+).** `Crafty-Synth-0.7-mpc.zip` is one folder for every MPC and

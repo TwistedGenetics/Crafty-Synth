@@ -206,6 +206,7 @@ function knob(key, label, color = "acc") {
   };
   k.draw = () => {
     const p = M.params[id()], v = patch[12 + p.id] / 127, bip = BIP.has(p.kind), { g, w, h } = fitCanvas(k.cv);
+    if (w < 16 || h < 16) return;                  // on a page not showing (the plugin's pages)
     const cx = w / 2, cy = h / 2 + 3, r = w / 2 - 6, a0 = Math.PI * 0.75, a1 = Math.PI * 2.25, col = T[k.color];
     const av = a0 + (a1 - a0) * v, af = bip ? a0 + (a1 - a0) * 0.5 : a0;
     g.lineCap = "round"; g.lineWidth = 5;
@@ -371,6 +372,8 @@ function refresh() {
     $(`mv${i}`).textContent = (P(`DEP${i}`) > 64 ? "+" : "") + (P(`DEP${i}`) - 64);
   }
   $("preset").value = cur;
+  const nm = $("pname");
+  if (nm && document.activeElement !== nm) nm.value = patchName();
   drawAll();
   drawSteps();
 }
@@ -391,6 +394,17 @@ function drawSteps() {
     };
     box.append(b);
   }
+}
+/* the preset's name: 12 characters the FM-1's screen can show (capitals, digits, space, a little punctuation) */
+function patchName() { return String.fromCharCode(...patch.slice(0, 12)).replace(/\0.*$/, ""); }
+function cleanName(s) { return s.toUpperCase().replace(/[^A-Z0-9 \-.\/+&!?#'()*:]/g, "").slice(0, 12); }
+let nameTimer = null;
+function setName(s) {
+  const n = cleanName(s);
+  for (let i = 0; i < 12; i++) patch[i] = i < n.length ? n.charCodeAt(i) : 0;
+  clearTimeout(nameTimer);                       // the working patch follows once typing pauses
+  nameTimer = setTimeout(() => { if (dev.connected) dev.putPatch(WORKING, patch).catch(status); }, 300);
+  return n;
 }
 function pushPatch() {
   post({ t: "patch", bytes: patch.slice() });
@@ -747,6 +761,11 @@ $("save").onclick = async () => {
   } catch (e) { status(e); }
 };
 $("pull").onclick = () => pull().catch(status);
+$("pname").oninput = (e) => {
+  const at = e.target.selectionStart, n = setName(e.target.value);
+  if (e.target.value !== n) { e.target.value = n; e.target.setSelectionRange(at, at); }
+};
+$("pname").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("save").click(); } };
 $("reset").onclick = async () => {
   const sl = +$("slot").value;
   try { await dev.resetPreset(sl); userNames[sl - 64] = null; buildPresetList(); $("slot").value = sl; status(`${label(sl)} emptied.`); }
@@ -762,6 +781,58 @@ try { const s = localStorage.getItem("crafty-theme"); if (s !== null) th = +s; }
 $("theme").value = th;
 setTheme(th);
 addEventListener("resize", () => drawAll());
+/* the plugin's window: the editor laid out at one width and zoomed to the window. WHOLE: everything in view; WIDTH: the
+   width fits and the page scrolls; or a fixed size. The plugin keeps the choice (and the window's size) in the project. */
+const DESIGN_W = 1240;
+let uiScale = "whole";
+function applyScale() {
+  if (!inPlugin) return;
+  const root = document.documentElement;
+  document.body.style.width = `${DESIGN_W}px`;
+  root.style.zoom = "1";
+  const h = Math.max(document.body.scrollHeight, 1);
+  const z = uiScale === "whole" ? Math.min(innerWidth / DESIGN_W, innerHeight / h) * 0.97
+    : uiScale === "width" ? innerWidth / DESIGN_W : +uiScale || 1;
+  root.style.zoom = String(Math.max(0.3, Math.min(3, z)));
+  document.body.style.overflowX = uiScale === "whole" || uiScale === "width" ? "hidden" : "auto";
+  root.style.overflowY = uiScale === "whole" ? "hidden" : "";
+  lastH = document.body.scrollHeight;
+}
+let lastH = 0;
+/* the plugin's pages (Serum-style tabs, like the FM-1's pages): one row of panels each, the keyboard always below */
+const PAGES = ["OSC", "FILTER / ENV / LFO", "MATRIX / FX", "FX / ARP-SEQ", "WAVETABLES"];
+function buildPages() {
+  const rack = $("rack"), kids = [...rack.children];
+  kids.forEach((k, i) => (k.dataset.page = String(Math.min(3, Math.floor(i / 3)))));
+  $("seqpanel").dataset.page = "3";
+  $("ubanks").closest("section").dataset.page = "4";
+  const bar = el("nav", { class: "pages" });
+  const show = (n) => {
+    document.querySelectorAll("[data-page]").forEach((e) => e.classList.toggle("on", e.dataset.page === String(n)));
+    bar.querySelectorAll("button").forEach((b, j) => b.classList.toggle("on", j === n));
+    drawAll();
+    applyScale();
+  };
+  PAGES.forEach((p, i) => bar.append(el("button", { textContent: p, onclick: () => show(i) })));
+  rack.before(bar);
+  show(0);
+}
+if (inPlugin) {
+  buildPages();
+  const init = (window.__JUCE__.initialisationData || {}).uiScale;
+  const s = Array.isArray(init) ? init[0] : init;
+  if (typeof s === "string" && s) uiScale = s;
+  $("sizebox").hidden = false;
+  $("uisize").value = uiScale;
+  $("uisize").onchange = () => {
+    uiScale = $("uisize").value;
+    applyScale();
+    window.__JUCE__.backend.emitEvent("crafty-ui", { scale: uiScale });
+  };
+  addEventListener("resize", applyScale);
+  setInterval(() => { if (document.body.scrollHeight !== lastH) applyScale(); }, 1000);   // a panel grew: re-fit
+  setTimeout(applyScale, 0);
+}
 if (inPlugin) {
   document.body.classList.add("plugin");
   $("save").textContent = "SAVE";

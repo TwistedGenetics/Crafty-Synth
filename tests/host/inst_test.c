@@ -149,6 +149,33 @@ int main(void)
         cr_inst_all_off(b);
     }
 
+    /* 0.8: every value is a destination: the mod wheel moves Wave 1's bank and the arp's tempo */
+    {
+        float lr[256];
+        cr_patch_t ap;
+        uint32_t b0;
+        cr_inst_load(a, 0);
+        cr_inst_param(a, CR_DST5, CR_D_W1BANK);      /* MOD WHL -> BANK 1 */
+        cr_inst_param(a, CR_DEP5, 127);
+        cr_inst_param(a, CR_DST6, CR_D_TEMPO);       /* EXPR -> TEMPO */
+        cr_inst_param(a, CR_DEP6, 127);
+        midi3(a, 0xB0, 1, 0);
+        midi3(a, 0xB0, 11, 0);
+        cr_inst_render(a, lr, 128);
+        cr_inst_render(a, lr, 128);
+        b0 = a->tb[0];
+        midi3(a, 0xB0, 1, 127);
+        midi3(a, 0xB0, 11, 127);
+        cr_inst_render(a, lr, 128);
+        cr_inst_render(a, lr, 128);
+        CHECK(a->tb[0] != b0 && a->tb[0] > b0, "the mod wheel didn't move bank 1 (%u -> %u)", b0, a->tb[0]);
+        cr_synth_arp_view(&a->syn, &a->p, &ap);
+        CHECK(ap.p[CR_TEMPO] > a->p.p[CR_TEMPO] + 40u, "expression didn't move the arp's tempo (%u, patch %u)",
+              ap.p[CR_TEMPO], a->p.p[CR_TEMPO]);
+        printf("inst: mod wheel moves bank 1 from %u to %u; expression the arp's tempo to %.0f BPM\n", b0, a->tb[0],
+               (double)cr_arp_bpm(&ap));
+    }
+
     /* the arp-seq locked to the host: 120 BPM, 1/16 steps, the transport running from beat 0 */
     {
         uint32_t blk, last = 0xFFFF, steps = 0, first = 0;

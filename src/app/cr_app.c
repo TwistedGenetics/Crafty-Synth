@@ -190,8 +190,8 @@ static void cr_tables(void)
 {
     uint32_t want[2], i, k;
     int32_t at[2] = {-1, -1};
-    want[0] = cr_bank_of(cr_p.p[CR_W1BANK], 0);
-    want[1] = cr_bank_of(cr_p.p[CR_W2BANK], 1);
+    want[0] = cr_bank_of(cr_synth_eff(&cr_syn, CR_W1BANK), 0);   /* the banks as the matrix leaves them */
+    want[1] = cr_bank_of(cr_synth_eff(&cr_syn, CR_W2BANK), 1);
     for (k = 0; k < 2u; k++)
         for (i = 0; i < 3u; i++)
             if (cr_tab_bank[i] == want[k])
@@ -376,7 +376,7 @@ static const cr_arp_out_t cr_arp_out = {cr_arp_on, cr_arp_off};
 /* a note into the instrument (inside cr_lock, or in the interrupt) */
 static void cr_play(uint32_t n, uint32_t v)
 {
-    if (cr_p.p[CR_ARP] >= 64u)
+    if (cr_synth_eff(&cr_syn, CR_ARP) >= 64u)    /* the arp as the matrix leaves it */
         cr_arp_key(&cr_arp, n, v);
     else if (v)
         cr_synth_on(&cr_syn, n, v);
@@ -391,7 +391,7 @@ static void cr_key_play(uint32_t n, uint32_t v)
         cr_play(n, v);
         cr_unlock();
     }
-    if (!(cr_p.p[CR_ARP] >= 64u && cr_g.arp_out))
+    if (!(cr_synth_eff(&cr_syn, CR_ARP) >= 64u && cr_g.arp_out))
         cr_midi3((v ? 0x90u : 0x80u) | cr_g.midi_ch, n, v);
 }
 static void cr_lat_clear(void)
@@ -765,6 +765,15 @@ void cr_app_input(void)
         uint32_t pc = (uint32_t)cr_want_preset;
         cr_want_preset = -1;
         cr_load(pc);
+    }
+    {   /* a bank the matrix moves: built here, as a bank turned on the panel */
+        static uint8_t seen[2] = {0xFF, 0xFF};
+        uint32_t b0 = cr_bank_of(cr_synth_eff(&cr_syn, CR_W1BANK), 0), b1 = cr_bank_of(cr_synth_eff(&cr_syn, CR_W2BANK), 1);
+        if (b0 != seen[0] || b1 != seen[1]) {
+            seen[0] = (uint8_t)b0;
+            seen[1] = (uint8_t)b1;
+            cr_want_tables = 1;
+        }
     }
     if (cr_want_tables) {
         cr_want_tables = 0;
@@ -1323,17 +1332,19 @@ void cr_app_draw(int force)
 }
 
 /* --------------------------------------------------------------------------------------------- the audio --- */
+static cr_patch_t cr_ap;                          /* the patch as the arp-seq sees it (TEMPO, RATE, ARP modulated) */
 void cr_app_render(int32_t *lr, uint32_t n)
 {
     uint32_t i;
     float bpm;
     if (n > 128u)
         n = 128u;
-    bpm = (cr_g.clock != 1u && cr_clock_seen && cr_clock_bpm > 0.f) ? cr_clock_bpm : cr_arp_bpm(&cr_p);
+    cr_synth_arp_view(&cr_syn, &cr_p, &cr_ap);
+    bpm = (cr_g.clock != 1u && cr_clock_seen && cr_clock_bpm > 0.f) ? cr_clock_bpm : cr_arp_bpm(&cr_ap);
     if (bpm - cr_syn.tempo > 0.5f || cr_syn.tempo - bpm > 0.5f)
         cr_synth_tempo(&cr_syn, bpm);
     if (!(cr_g.clock != 1u && cr_clock_seen))
-        cr_arp_run(&cr_arp, &cr_p, n);
+        cr_arp_run(&cr_arp, &cr_ap, n);
     cr_synth_render(&cr_syn, cr_fbuf, n);
     for (i = 0; i < 2u * n; i++)
         lr[i] = (int32_t)(cr_fbuf[i] * 32767.f);
@@ -1428,7 +1439,7 @@ void cr_app_realtime(uint8_t b)
         cr_clock_seen = 1;
         cr_clock_ms = now;
         if (cr_g.clock != 1u)
-            cr_arp_clock(&cr_arp, &cr_p);
+            cr_arp_clock(&cr_arp, &cr_ap);
     } else if (b == 0xFAu) {
         cr_arp.ticks = 1000;                     /* start: the next tick is a step */
     }
