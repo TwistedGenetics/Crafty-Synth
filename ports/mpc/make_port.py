@@ -147,6 +147,21 @@ def cells_svg(boxes):
     return f'<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="628" viewBox="0 86 1280 628">{r}</svg>\n'
 
 
+# the MPC's tab bar: one short word a page (the long section names ran together on the MPC's buttons)
+TAB_NAMES = {"SUB OSC / FILTER": "FILTER", "FILTER EG / AMP EG": "ENVELOPE", "MOD EG / LFO 1 / LFO 2": "MOD",
+             "MATRIX LFO 1 - NOTE +1": "MATRIX", "REVERB / DELAY / MOD FX": "FX", "CRUSH / PRESET / ARP-SEQ": "PRESET"}
+
+
+def short_tabs(layout):
+    for old, new in TAB_NAMES.items():
+        layout = layout.replace(f"[tab {old}]", f"[tab {new}]").replace(f'qlinks "{old}"', f'qlinks "{new}"')
+    left = re.findall(r"(?m)^\[tab (.+)\]", layout)
+    long = [n for n in left if len(n) > 8]
+    if long:
+        sys.exit(f"make_port: tab names too long for the MPC's tab bar: {long}: add them to TAB_NAMES")
+    return layout
+
+
 def with_cells(layout):
     """every page's controls in the editor's cells (art/cells_<page>_<panel>.svg), each panel's drawn just after the
     panel (before the controls' own baked labels, which go on top). -> (layout, {file name: svg})"""
@@ -227,7 +242,7 @@ def main():
         auto_tabs = re.split(r"(?m)^(?=\[tab )", auto.read_text())
         # the auto-layout's MORE page holds what no section names: the OSC page's controls and the hidden views
         auto_text = "".join(t for t in auto_tabs if not t.startswith("[tab MORE"))
-        body, cells = with_cells(osc + bigger(auto_text, names))
+        body, cells = with_cells(short_tabs(osc + bigger(auto_text, names)))
         layout = THEME + body
     stale = []
     if "--views" in sys.argv:                           # the 3D wavetable views' filmstrips (committed PNGs)

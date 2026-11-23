@@ -5,6 +5,7 @@
  * User presets and wavetables come from "Crafty Synth.user" in the plugin's data folder: the plugin's file
  * (Mac) or the FM-1's user area, byte for byte. 0.13: WAVs under its Wavetables folder are numbered in
  * TableIndex.txt (src/host/cr_tables.c, the Twisted Tracker's way) and "table1" / "table2" play one in place of a
+ * wave's bank: their value is the file's place in the folder by name (0: the bank), the project keeps its path,
  * wave's bank; "random" is Random Patch (src/core cr_patch_random). Copyright (C) 2026 Jamie (TwistedGenetics). */
 #define _DEFAULT_SOURCE                         /* strdup, strcasecmp, dirent */
 #include <stdio.h>
@@ -35,6 +36,7 @@ typedef struct {
     char fpath[2][CR_TABLES_PATH];              /*   ... their paths (kept when missing: the project finds them later) */
     int16_t waves[2][5][CR_WT_N];
     int rkeep;                                  /* RANDOM keeps the tables */
+    int tpos[2];                                /* table1 / table2 as last reported (-1: not yet) */
     int shown[2];                               /* the 3D views' bank as last reported (w1shown, w2shown; -1: not yet) */
     uint32_t seed;
 } mpc_t;
@@ -71,6 +73,19 @@ static void tabs_walk(const char *rel, int depth)
         free(names[i]);
     }
 }
+static char DDIR[1024];
+static time_t TSCAN;
+static void tabs_scan(const char *dir);
+static void tabs_rescan(void)                   /* new files in the folder: at most every 20 s */
+{
+    if (DDIR[0] && time(0) - TSCAN >= 20)
+        tabs_scan(DDIR);
+}
+/* a wave's TABLE FILE value: its file's place by name, 1..; 0: the bank (or a file not on this MPC) */
+static int tpos_of(const mpc_t *m, int k)
+{
+    return cr_tables_present(&TABS, m->file[k]) ? (int)TABS.pos[m->file[k]] + 1 : 0;
+}
 static void tabs_scan(const char *dir)
 {
     char index[1100], buf[4096];
@@ -78,6 +93,9 @@ static void tabs_scan(const char *dir)
     uint32_t n;
     if (!dir)
         return;
+    if (dir != DDIR)
+        snprintf(DDIR, sizeof DDIR, "%s", dir);
+    TSCAN = time(0);
     snprintf(TDIR, sizeof TDIR, "%s/Wavetables", dir);
     mkdir(TDIR, 0755);
     snprintf(index, sizeof index, "%s/TableIndex.txt", dir);
@@ -203,6 +221,7 @@ static void *create(const char *dir)
     (void)cr_inst_take_patch_changed(&m->in);
     tabs_scan(dir);
     m->shown[0] = m->shown[1] = -1;
+    m->tpos[0] = m->tpos[1] = -1;
     return m;
 }
 static void destroy(void *p) { free(p); }
@@ -299,10 +318,12 @@ static void set_param(void *p, const char *key, const char *val)
     }
     if (!strcmp(key, "table1") || !strcmp(key, "table2")) {
         int v = (int)(atof(val) + 0.5), k = key[5] - '1';
-        if (v < 0 || v > (int)CR_TABLES_MAX)
+        if (v < 0 || v > (int)CR_TABLES_MAX || v == tpos_of(m, k))
             return;
-        if ((uint32_t)v != m->file[k])
-            set_file(m, k, (uint32_t)v);
+        if (v > (int)TABS.nsorted)              /* past the last file: the last one */
+            v = (int)TABS.nsorted;
+        set_file(m, k, v ? cr_tables_at(&TABS, (uint32_t)v - 1u) : 0u);
+        tabs_rescan();                          /* files added since: their places (reported if this one's moved) */
         return;
     }
     if (!strcmp(key, "random")) {               /* a trigger: it springs back to 0 */
@@ -346,7 +367,7 @@ static int get_param(void *p, const char *key, char *buf, int n)
     if (!strcmp(key, "preset"))
         return snprintf(buf, (size_t)n, "%d", m->in.cur);
     if (!strcmp(key, "table1") || !strcmp(key, "table2"))
-        return snprintf(buf, (size_t)n, "%u", (unsigned)m->file[key[5] - '1']);
+        return snprintf(buf, (size_t)n, "%d", tpos_of(m, key[5] - '1'));
     if (!strcmp(key, "table1_display") || !strcmp(key, "table2_display")) {   /* "GROWL", "BANK", "MISSING" */
         int k = key[5] - '1';
         char lab[64];
@@ -435,6 +456,12 @@ int mpc_engine_changed(void *p, char *key, int len)
         snprintf(key, (size_t)len, "%s", k < 3 ? PK[k] : k < 3 + (int)CR_NP ? KEYS[k - 3] : k == 3 + (int)CR_NP ? "table1" : "table2");
         return 1;
     }
+    for (k = 0; k < 2; k++)                     /* a file's place by name moved (new files in the folder) */
+        if (tpos_of(m, k) != m->tpos[k]) {
+            m->tpos[k] = tpos_of(m, k);
+            snprintf(key, (size_t)len, "table%d", k + 1);
+            return 1;
+        }
     for (k = 0; k < 2; k++) {                   /* the 3D views follow the bank (or file) that plays */
         int s = shown_of(m, k);
         if (s != m->shown[k]) {

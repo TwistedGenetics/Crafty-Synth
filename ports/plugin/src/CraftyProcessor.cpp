@@ -140,6 +140,18 @@ void CraftyProcessor::sendTables()
     for (int k = 0; k < 2; k++)
         sel.add(tablePath[(size_t)k]);
     o->setProperty("sel", sel);
+    juce::Array<juce::var> waves;                   // the files' waves, for the editor's 3D views
+    {
+        const juce::ScopedLock sl(lock);
+        for (int k = 0; k < 2; k++) {
+            juce::Array<juce::var> w;
+            if (inst->tb[k] == 0xFEu)
+                for (auto v : tableWaves[(size_t)k])
+                    w.add((int)v);
+            waves.add(w);
+        }
+    }
+    o->setProperty("waves", waves);
     o->setProperty("folder", CraftyTableFiles::folder().getFullPathName());
     toEditorTables(juce::var(o));
 }

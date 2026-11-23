@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.15 beta (2026-11-23)
+
+- **Your wavetables come from a folder, as on the Twisted Tracker** (AU / VST3 and MPC): the 32 user bank slots are
+  gone from their bank lists, which now hold the factory banks only. Put WAVs in the Wavetables folder (sub-folders
+  too) and pick them with TABLE FILE under each oscillator.
+  - MPC: TABLE FILE steps through the folder's files in name order (folders together); the project keeps the file by
+    its path, and new files are picked up while you browse.
+  - AU / VST3: the TABLE FILE list shows the folder, grouped by sub-folder, and the oscillator's 3D view now draws
+    the file's own waves. The USER WAVETABLES importer is gone from the plugin window.
+  - FM-1 and the editor in the browser: unchanged (the FM-1 has no folder: its 32 user banks stay, filled from the
+    editor). Patches that already use a user bank still play it.
+- **MPC: short page names** in the tab bar: OSC, FILTER, ENVELOPE, MOD, MATRIX, FX, PRESET (the long ones ran into each
+  other).
+
 ## 0.14 beta (2026-11-23)
 
 - **MPC: the AU / VST3's look, and the 3D wavetable views.** The MPC skin is now drawn like the editor and the plugin

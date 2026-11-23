@@ -22,8 +22,7 @@ Plug-Ins → Twisted Genetics → Crafty Synth.
 **The window is the web editor**, in the same SERUM look and layout: both oscillators with their wavetables, the
 filter, envelopes, LFOs, the matrix, every effect, the arp-seq pattern, the wavetables and the keyboard (scroll down for
 the lower panels). It is always connected: the preset list,
-**NAME**, **SAVE** (to a user slot), **RELOAD**, **EMPTY SLOT** and the wavetable importer (**STORE**) work on the
-plugin the way they work on an FM-1.
+**NAME**, **SAVE** (to a user slot), **RELOAD** and **EMPTY SLOT** work on the plugin the way they work on an FM-1.
 
 - **Naming a preset:** type in **NAME** (12 characters, as the FM-1 shows them: capitals, digits, space, a little
   punctuation), pick a user slot, **SAVE** (or Enter in the name).
@@ -41,10 +40,11 @@ plugin the way they work on an FM-1.
 - **MIDI**: notes, the CRAFTsynth's CC chart (the same CCs as the FM-1), pitch bend, mod wheel, aftertouch, sustain,
   program change. The project saves the patch you're playing (and which preset it came from).
 - Any sample rate: the engine runs at 44.1 kHz like the FM-1 and is resampled to the DAW's rate.
-- **Wavetable files** (0.13, as the Twisted Tracker's CRAFTY): put WAVs (Serum and Vital tables, single cycles,
+- **Your wavetables** (0.15, as on the Twisted Tracker): put WAVs (Serum and Vital tables, single cycles,
   sub-folders too) in `~/Library/Application Support/Twisted Genetics/Crafty Synth/Wavetables`. **TABLE FILE** under
-  each oscillator plays one in place of its bank ("(the bank)" to go back); the list re-reads the folder when you open
-  it. Every file gets a number for good in `TableIndex.txt` next to the folder, the Tracker's and the MPC's format:
+  each oscillator lists the folder (grouped by sub-folder) and plays the one you pick in place of its bank ("(the
+  bank)" to go back), its waves drawn in the oscillator's 3D view; the list re-reads the folder when you open it. The
+  bank lists hold the factory banks only, and the 32-slot importer is gone from the plugin window. Every file gets a number for good in `TableIndex.txt` next to the folder, the Tracker's and the MPC's format:
   copy both between them and the numbers match. The project keeps the file by its path. A file plays as the five
   waves the importer picks (evenly through the table); the matrix can't move a file as it moves a bank.
 - **RANDOM** picks a preset and varies it (the FM-1's rules, docs/MANUAL.md); half the time each oscillator also gets
@@ -75,12 +75,12 @@ A project saved on one MPC opens on any other.
 | Page | Controls |
 |---|---|
 | OSC | the editor's two oscillator panels: each bank's wavetable in 3D (as the editor draws it, following WT POS), the bank list in the head · OSC A: WT POS, OSC MOD, MOD MODE, TABLE FILE, MIX, SPREAD, GLIDE, OCTAVE · OSC B: WT POS, TUNE, FINE, B MOD, B MODE, TABLE FILE |
-| SUB OSC / FILTER | sub level, octave, wave · cutoff, reso, morph, type, filter EG, distortion |
-| FILTER EG / AMP EG | the filter envelope · the amp envelope, amp EG amount, volume |
-| MOD EG / LFO 1 / LFO 2 | the mod envelope · LFO 1 · LFO 2 (rate, shape, mode, sync) |
+| FILTER | sub level, octave, wave · cutoff, reso, morph, type, filter EG, distortion |
+| ENVELOPE | the filter envelope · the amp envelope, amp EG amount, volume |
+| MOD | the mod envelope · LFO 1 · LFO 2 (rate, shape, mode, sync) |
 | MATRIX | one destination and depth per source (LFO 1 - NOTE, then VELO - AFTTCH) |
-| REVERB / DELAY / MOD FX | the Horizon reverb (mode, size, decay, mix, warp, density, mod) · the delay · chorus, phaser |
-| CRUSH / PRESET / ARP-SEQ | era, crush, OTT · bank, slot, preset, RANDOM, RND TABLES · arp, tempo, rate |
+| FX | the Horizon reverb (mode, size, decay, mix, warp, density, mod) · the delay · chorus, phaser |
+| PRESET | era, crush, OTT · bank, slot, preset, RANDOM, RND TABLES · arp, tempo, rate |
 
 **The look** (0.14) is the editor's and the plugin window's: the SERUM colours, rounded panels, each control in its
 own cell, the same knobs. The 3D view shows the bank playing (a user bank or a table file shows YOUR WAVETABLE: its
@@ -90,13 +90,12 @@ waves are only known on the MPC) and follows WT POS in 16 steps; touching it mov
   own PRESET menu lists them by name.
 - **Values read as on the FM-1** (cutoff in Hz, delay in divisions, LADDER, HALL...). Lists (banks, modifiers,
   filter types, reverb modes, matrix destinations) open as pop-ups.
-- **Your user presets and wavetables**: copy `Crafty Synth.user` from your Mac (path above) into the plugin's `data`
+- **Your user presets**: copy `Crafty Synth.user` from your Mac (path above) into the plugin's `data`
   folder on the MPC (`VST2 Plugins/Twisted Genetics - VST - Crafty Synth/data/`).
-- **Wavetable files** (0.13): WAVs in `data/Wavetables` (sub-folders too) are numbered in `data/TableIndex.txt`;
-  **TABLE FILE** on the OSC page plays one by its number in place of that oscillator's bank (0: the bank), shown
-  by name.
-  New files get their numbers in name order when the plugin loads. Copy `Wavetables` and `TableIndex.txt` from the Mac
-  or the Tracker to keep the same numbers.
+- **Your wavetables** (0.15, as on the Twisted Tracker): put WAVs in `data/Wavetables` (sub-folders too). **TABLE FILE**
+  on the OSC page steps through them in name order, folders together (0: the bank), and plays the one shown in place of
+  that oscillator's bank; the bank lists hold the factory banks only. The project keeps the file by its path. Files you
+  add are picked up as you browse (at most every 20 s). `data/TableIndex.txt` numbers them as the Tracker and the Mac do.
 - **RANDOM** (a button on the PRESET page) picks a preset and varies it, as the FM-1's; **RND TABLES** = KEEP leaves
   the banks and files alone, NEW gives each oscillator a random factory bank and, half the time, one of your files.
 - **The arp-seq follows the MPC's tempo and transport.** The MPC project keeps the patch.

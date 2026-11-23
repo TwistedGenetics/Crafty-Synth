@@ -72,6 +72,15 @@ static void mpc_list(uint32_t id, mpc_list_t *l)
         if (v < 128u)
             strcpy(prev, t);
     }
+    if (CR_P[id].kind == CR_K_BANK) {   /* 0.15: the factory banks only; your wavetables come from the folder */
+        uint32_t c, k;
+        for (c = 0; c < l->n && strncmp(l->name[c], "USER", 4); c++)
+            ;
+        l->n = (uint8_t)c;
+        for (k = 0; k < 128u; k++)
+            if (l->of[k] >= l->n)
+                l->of[k] = 0;
+    }
 }
 
 /* the MPC's key for parameter id: its name in cr_patch.h, lower case ("w1pos", "cut") */

@@ -42,17 +42,20 @@ int main(int argc, char **argv)
         char wp[600];
         static const uint8_t hdr[44] = {'R','I','F','F', (36 + 1200) & 0xFF, (36 + 1200) >> 8, 0, 0, 'W','A','V','E','f','m','t',' ',
             16, 0, 0, 0, 1, 0, 1, 0, 0x44, 0xAC, 0, 0, 0x88, 0x58, 1, 0, 2, 0, 16, 0, 'd','a','t','a', 1200 & 0xFF, 1200 >> 8, 0, 0};
-        snprintf(wp, sizeof wp, "mkdir -p '%s/Wavetables/Leads' && rm -f '%s/TableIndex.txt'", dir, dir);
+        snprintf(wp, sizeof wp, "rm -rf '%s/Wavetables' '%s/TableIndex.txt' && mkdir -p '%s/Wavetables/Leads' '%s/Wavetables/Basses'",
+                 dir, dir, dir, dir);
         CHECK(system(wp) == 0, "mkdir");
-        snprintf(wp, sizeof wp, "%s/Wavetables/Leads/Saw Up.wav", dir);
-        f = fopen(wp, "wb");
-        if (f) {
-            fwrite(hdr, 1, sizeof hdr, f);
-            for (i = 0; i < 600; i++) {
-                int16_t v = (int16_t)(i * 100 - 30000);
-                fwrite(&v, 2, 1, f);
+        for (int w = 0; w < 2; w++) {           /* Leads/Saw Up first on the disk, Basses/Acid first by name */
+            snprintf(wp, sizeof wp, w ? "%s/Wavetables/Basses/Acid.wav" : "%s/Wavetables/Leads/Saw Up.wav", dir);
+            f = fopen(wp, "wb");
+            if (f) {
+                fwrite(hdr, 1, sizeof hdr, f);
+                for (i = 0; i < 600; i++) {
+                    int16_t v = (int16_t)(w ? (i < 300 ? 20000 : -20000) : i * 100 - 30000);
+                    fwrite(&v, 2, 1, f);
+                }
+                fclose(f);
             }
-            fclose(f);
         }
     }
     snprintf(path, sizeof path, "%s/Crafty Synth.user", dir);
@@ -84,7 +87,7 @@ int main(int argc, char **argv)
     i = 0;
     while (mpc_engine_changed(m, key, sizeof key))
         i++;
-    CHECK(i >= 3 + (int)CR_NP + 2 && i <= 3 + (int)CR_NP + 4, "a preset reported %d keys", i);
+    CHECK(i >= 3 + (int)CR_NP + 2 && i <= 3 + (int)CR_NP + 6, "a preset reported %d keys", i);
     e->set_param(m, "pslot", "3");
     CHECK(!strcmp(get(e, m, "preset"), "66"), "slot 3: preset %s", get(e, m, "preset"));
     /* a CC on the track: the screen is told */
@@ -96,8 +99,10 @@ int main(int argc, char **argv)
         CHECK(mpc_engine_changed(m, key, sizeof key) && !strcmp(key, "res"), "CC 35 reported as %s", key);
     }
     /* 0.13: the wavetable file, by number, shown by name; RANDOM */
-    e->set_param(m, "table2", "1");
-    CHECK(!strcmp(get(e, m, "table2"), "1") && !strcmp(get(e, m, "table2_display"), "Saw Up"), "table2: %s %s",
+    e->set_param(m, "table2", "1");                 /* by name: Basses/Acid, then Leads/Saw Up */
+    CHECK(!strcmp(get(e, m, "table2_display"), "Acid"), "table2 1: %s", get(e, m, "table2_display"));
+    e->set_param(m, "table2", "2");
+    CHECK(!strcmp(get(e, m, "table2"), "2") && !strcmp(get(e, m, "table2_display"), "Saw Up"), "table2: %s %s",
           get(e, m, "table2"), get(e, m, "table2_display"));
     CHECK(!strcmp(get(e, m, "table1_display"), "BANK"), "table1 shows %s", get(e, m, "table1_display"));
     {   /* the OSC page's 3D views: wave 2 plays a file (USER view), wave 1 its factory bank */
@@ -118,13 +123,13 @@ int main(int argc, char **argv)
             same = !strcmp(before, get(e, m, "state"));
         }
         CHECK(!same, "RANDOM changed nothing");
-        CHECK(!strcmp(get(e, m, "table2"), "1"), "RANDOM (tables kept) dropped the file");
+        CHECK(!strcmp(get(e, m, "table2"), "2"), "RANDOM (tables kept) dropped the file");
         e->set_param(m, "rkeep", "0");
         e->set_param(m, "pslot", "4");
         e->set_param(m, "pslot", "3");
         while (mpc_engine_changed(m, key, sizeof key))
             ;
-        e->set_param(m, "table2", "1");
+        e->set_param(m, "table2", "2");
         e->set_param(m, "res", "99");
     }
     /* state into a second instance */

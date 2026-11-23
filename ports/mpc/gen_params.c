@@ -96,7 +96,7 @@ int main(void)
             printf(", \"min\": 0, \"max\": 127, \"default\": %u, \"dynamic_display\": true", CR_P[i].def);
         printf("}");
     }
-    /* 0.13: the wavetable files (numbers in TableIndex.txt, 0 = the bank, shown by name), Random Patch */
+    /* 0.13: the wavetable files (0.15: their place in the folder by name, 0 = the bank, shown by name), Random Patch */
     printf(",\n  {\"key\": \"table1\", \"name\": \"TABLE 1\", \"min\": 0, \"max\": %u, \"default\": 0, "
            "\"display\": \"int\", \"dynamic_display\": true, \"nudge_pct\": 1}", CR_TABLES_MAX);
     printf(",\n  {\"key\": \"table2\", \"name\": \"TABLE 2\", \"min\": 0, \"max\": %u, \"default\": 0, "

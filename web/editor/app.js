@@ -89,8 +89,8 @@ function waveAt(d, bank, pos, k) {
   return v;
 }
 // a wavetable as Serum draws it: frames stacked in depth, faint and tinted, the one playing bright and filled
-function drawTable(c, bank, pos127, color) {
-  const { g, w, h } = fitCanvas(c), d = waveData(bank);
+function drawTable(c, bank, pos127, color, data) {   // data: a wavetable file's 5 x 256 waves (the plugin)
+  const { g, w, h } = fitCanvas(c), d = data || waveData(bank);
   if (!d) return;
   const F = 15, dx = w * 0.018, dy = h * 0.035, fw = w - 16 - dx * (F - 1), amp = (h - 20 - dy * (F - 1)) * 0.45;
   const x0 = 8, base = h - 10 - amp, pos = pos127 / 127;
@@ -225,7 +225,11 @@ function knob(key, label, color = "acc") {
 }
 function pick(key, label) {
   const p = M.params[PI[key]], s = el("select");
-  for (const [v, n] of choices(p)) s.append(el("option", { value: v, textContent: n }));
+  for (const [v, n] of choices(p)) {
+    const o = el("option", { value: v, textContent: n });
+    if (inPlugin && p.kind === "BANK" && bankOf(v, key === "W2BANK") >= 9) o.hidden = true;   // the folder's files instead
+    s.append(o);
+  }
   s.onchange = () => setParam(p.id, +s.value);
   const box = el("div", { class: "pick" }, el("label", { textContent: label || p.name }), s);
   picks.push({ key, s, p });
@@ -301,7 +305,7 @@ function tabs(names, on, cb) {
 /* 0.13, the plugin: a wavetable file from its Wavetables folder in place of a wave's bank (the Twisted Tracker's
    TABLE 1 / 2 FILE). The plugin keeps the list and the choice ("crafty-tables" events); "" is the bank. */
 const tableSel = [];
-let tableFiles = [], tableNow = ["", ""];
+let tableFiles = [], tableNow = ["", ""], tableData = [null, null];   // the files' waves, to draw
 const tableLabel = (p) => p.slice(p.lastIndexOf("/") + 1).replace(/\.wav$/i, "");
 function tableFilePick(k) {
   const s = el("select");
@@ -331,7 +335,9 @@ function setTableFile(k, path) {
 }
 if (inPlugin) {
   window.__JUCE__.backend.addEventListener("crafty-tables", (v) => {
-    tableFiles = v.files || []; tableNow = v.sel || ["", ""]; renderTables();
+    tableFiles = v.files || []; tableNow = v.sel || ["", ""];
+    tableData = [0, 1].map((k) => (v.waves && v.waves[k] && v.waves[k].length === 5 * N ? Int16Array.from(v.waves[k]) : null));
+    renderTables(); refresh();
   });
 }
 
@@ -397,8 +403,8 @@ function build() {
 
 function drawAll() {
   if (!views.wtA) return;
-  drawTable(views.wtA, bankOf(P("W1BANK"), false), P("W1POS"), T.acc);
-  drawTable(views.wtB, bankOf(P("W2BANK"), true), P("W2POS"), T.acc2);
+  drawTable(views.wtA, tableData[0] ? -1 : bankOf(P("W1BANK"), false), P("W1POS"), T.acc, tableData[0]);
+  drawTable(views.wtB, tableData[1] ? -1 : bankOf(P("W2BANK"), true), P("W2POS"), T.acc2, tableData[1]);
   drawFilter(views.filter);
   drawEnv(views.env, PI[ENV[envTab][1][0]]);
   drawLfo(views.lfo, LFO[lfoTab][1][1]);
@@ -871,6 +877,7 @@ if (inPlugin) {
 }
 if (inPlugin) {
   document.body.classList.add("plugin");
+  $("ubanksec").hidden = true;                    // the plugin's wavetables come from its folder (TABLE FILE)
   $("save").textContent = "SAVE";
   $("pull").textContent = "RELOAD";
   connect();
