@@ -13,6 +13,21 @@ static const float VOWEL[5][3] = {{730.f, 1090.f, 2440.f}, {530.f, 1840.f, 2480.
 static const float VGAIN[3] = {1.f, 0.55f, 0.3f};
 
 static float fclampf(float x, float lo, float hi) { return x < lo ? lo : x > hi ? hi : x; }
+/* 0.20: where the ladder's loop starts to ring by itself, for its stages' G = 0, 0.1 .. 0.9 (its feedback is a sample
+ * late, so the higher the cutoff the less resonance it takes; above it the ring heads for half the sample rate, a
+ * buzz at each note's filter sweep). Resonance is scaled by it, so it behaves at every cutoff as it does low down. */
+static const float LAD_KCRIT[10] = {3.646f, 3.23f, 2.741f, 2.344f, 2.025f, 1.766f, 1.553f, 1.377f, 1.228f, 1.103f};
+static float lad_kscale(float G)
+{
+    float x = fclampf(G, 0.f, 0.9f) * 10.f;
+    uint32_t i = (uint32_t)x;
+    float a, b;
+    if (i > 8u)
+        i = 8u;
+    a = LAD_KCRIT[i];
+    b = LAD_KCRIT[i + 1u];
+    return (a + (b - a) * (x - (float)i)) * (1.f / 3.646f);
+}
 static float tang(float hz) { return cr_tanf(3.14159265f * fclampf(hz, 10.f, 0.45f * FS) / FS); }
 
 void cr_filt_init(cr_filt_t *f, int16_t *comb_mem)
@@ -56,7 +71,7 @@ void cr_filt_set(cr_filt_t *f, uint32_t type, float hz, float res, float m)
     switch (type) {
     case CR_F_LADDER:
     case CR_F_303:
-        f->k = type == CR_F_303 ? res * 3.4f : res * 4.1f;      /* the 303 never quite self-oscillates */
+        f->k = (type == CR_F_303 ? res * 3.4f : res * 4.1f) * lad_kscale(f->G);   /* the 303 never quite self-oscillates */
         f->drive = type == CR_F_303 ? 1.8f : 1.f;
         {   /* morph: four mixes of the stages, crossfaded (Xpander-style) */
             float x = f->m * 3.f;

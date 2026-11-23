@@ -2,9 +2,11 @@
  * Crafty Synth on the MPC (ports/mpc/cr_mpc.c) through its engine interface: lists set and read by choice, the
  * FM-1's value text, presets by bank and slot from a user file, state, CC read-back, sound.
  * Copyright (C) 2026 Jamie (TwistedGenetics). */
+#define _DEFAULT_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "engine.h"
 #include "cr_inst.h"
 
@@ -154,7 +156,13 @@ int main(int argc, char **argv)
         {   /* 0.19: its view draws the file's ramp: low columns at the left, high at the right */
             int lo = atoi(get(e, m, "w2c_2")), hi = atoi(get(e, m, "w2c_55")), mid = atoi(get(e, m, "w2c_28"));
             CHECK(lo < 6 && hi > 26 && mid > 12 && mid < 20, "w2 view columns %d %d %d", lo, mid, hi);
-            CHECK(!strcmp(get(e, m, "w2shown"), "0"), "w2shown %s", get(e, m, "w2shown"));
+            CHECK(!strcmp(get(e, m, "w2shown"), "0") || !strcmp(get(e, m, "w2shown"), "10"), "w2shown %s", get(e, m, "w2shown"));
+        }
+        {   /* 0.20: its 3D picture, drawn into the skin in the background: then w2shown is FILE (10) */
+            int t;
+            for (t = 0; t < 400 && strcmp(get(e, m, "w2shown"), "10"); t++)
+                usleep(50000);
+            CHECK(!strcmp(get(e, m, "w2shown"), "10"), "the file's 3D picture wasn't written (w2shown %s)", get(e, m, "w2shown"));
         }
         while (mpc_engine_changed(m, key, sizeof key))
             ;

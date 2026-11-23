@@ -246,6 +246,8 @@ def osc_tab():
         out.append(f'button cx={x + w - 66} cy={y + 30} label="LIST" label_on="CLOSE" key=w{wave}list')
         vx, vy = x + (w - VIEW_W) // 2, y + 58
         out.append(f'art file=art/wt_user.png x={vx} y={vy} w={VIEW_W} h={VIEW_H}')
+        out.append(f'meter cx={vx + VIEW_W // 2} cy={vy + VIEW_H // 2} w={VIEW_W} h={VIEW_H} key=w{wave}pos '
+                   f'strip=art/wt{wave}_file.png frames=17 when=w{wave}shown:{banks + 1}')   # a file, drawn in 3D
         cw = VIEW_W // VIEW_COLS                        # a user table: its wave at WT POS, column by column
         for c in range(VIEW_COLS):
             out.append(f'meter cx={vx + c * cw + cw // 2} cy={vy + VIEW_H // 2} w={cw} h={VIEW_H} key=w{wave}c_{c + 1} '

@@ -19,6 +19,7 @@
 #include "cr_inst.h"
 #include "cr_tables.h"
 #include "cr_wav.h"
+#include "cr_mpc_pic.h"
 #include "cr_keys.h"
 #include "cr_mpc_lists.h"
 
@@ -57,7 +58,8 @@ typedef struct {
     uint32_t sus_bits[4];
     float vbuf[2 * CR_INST_FRAMES];
     uint32_t sslot;                             /* SAVE TO: a user slot, 64..191 */
-    uint8_t col[2][NCOL];                       /* 0.19: a user table's view: its columns as last reported (0xFF: not yet) */
+    uint8_t col[2][NCOL];
+    uint32_t picgen[2], picid[2];               /* 0.20: the 3D picture asked for each wave's file, and which file */                       /* 0.19: a user table's view: its columns as last reported (0xFF: not yet) */
     int tpos[2];                                /* table1 / table2 as last reported (-1: not yet) */
     int shown[2];                               /* the 3D views' bank as last reported (w1shown, w2shown; -1: not yet) */
     uint32_t seed;
@@ -119,6 +121,7 @@ static void tabs_scan(const char *dir)
         snprintf(DDIR, sizeof DDIR, "%s", dir);
     TSCAN = time(0);
     snprintf(TDIR, sizeof TDIR, "%s/Wavetables", dir);
+    mkdir(dir, 0755);                           /* (the official package has no data folder until we make one) */
     mkdir(TDIR, 0755);
     snprintf(index, sizeof index, "%s/TableIndex.txt", dir);
     if (!tabs_ready) {
@@ -171,12 +174,18 @@ static void set_file(mpc_t *m, int k, uint32_t id)
         }
     }
     cr_inst_file_table(&m->in, (uint32_t)k, ok ? (const int16_t (*)[CR_WT_N])m->waves[k] : 0);
+    if (ok && DDIR[0] && m->picid[k] != id) {   /* 0.20: its 3D picture, drawn into the skin (cr_mpc_pic.h) */
+        m->picgen[k] = pic_request(DDIR, k, (const int16_t (*)[CR_WT_N])m->waves[k]);
+        m->picid[k] = id;
+    }
 }
 /* what wave k's 3D view shows (the skin's w<k>shown): 0 a user bank or a wavetable file, else factory bank + 1 */
 static int shown_of(const mpc_t *m, int k)
 {
     uint32_t b = cr_bank_of(m->in.p.p[k ? CR_W2BANK : CR_W1BANK], k);
-    return m->in.file[k] || b >= CR_NBANK ? 0 : (int)b + 1;
+    if (m->in.file[k])                          /* a file: in 3D once its picture is written, else its columns */
+        return m->picid[k] == m->file[k] && pic_done(k, m->picgen[k]) ? (k ? (int)CR_NBANK : (int)CR_BANK_NOISE) + 1 : 0;
+    return b >= CR_NBANK ? 0 : (int)b + 1;
 }
 /* ---- 0.17: each oscillator's wavetable list: its factory banks (8, or 9 with sine / noise on OSC B), then the
  * files in data/Wavetables in folder order (by path: a folder's files together). One place in it, w<n>wt. ---- */

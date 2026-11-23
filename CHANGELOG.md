@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.20 beta (2026-11-23)
+
+- **Fix, every version: the buzzing click at the start of notes on the LADDER and TB-303 filters.** With the cutoff
+  high (a filter envelope's sweep at each note) and the resonance up, their loop rang at half the sample rate (ACID
+  was the worst). Their resonance now follows the cutoff, so they ring where they should at every cutoff and the
+  303 never self-oscillates, as before.
+- **MPC, an experiment: your wavetable files in 3D.** When a file from `data/Wavetables` plays, the plugin draws its
+  3D view as the factory banks' are drawn (the stack, the wave at WT POS bright and filled) and writes it into its own
+  skin (`Plugin Skins/sh_crafty_file1.png` / `2.png`). Until MPC shows it, the view says to close and reopen the
+  plugin; whether that is needed, or enough, is what this finds out. User banks still show their columns.
+- MPC: the `data` folder is made if it isn't there (the official package doesn't have one), so `data/Wavetables` is.
+
 ## 0.19 beta (2026-11-23)
 
 MPC only:

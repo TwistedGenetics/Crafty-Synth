@@ -86,8 +86,10 @@ A project saved on one MPC opens on any other.
 
 **The look** (0.14) is the editor's and the plugin window's: the SERUM colours, rounded panels, each control in its
 own cell, the same knobs. The 3D view shows the factory bank playing and follows WT POS in 16 steps; touching it moves
-WT POS. A file from `data/Wavetables` or a user bank (0.19) shows its own wave at WT POS, drawn by the engine as 56
-columns (the skin can't hold its picture: it's only known on the MPC).
+WT POS. A user bank (0.19) shows its own wave at WT POS, drawn by the engine as 56 columns. A file from
+`data/Wavetables` (0.20, an experiment) shows the columns while the plugin draws its 3D view into its skin
+(`Plugin Skins/sh_crafty_file1.png` / `2.png`, about 5 MB each, a second or so), then that view; if MPC still shows
+"close and reopen the plugin", it only loads skin pictures when the plugin opens.
 
 - **Presets**: BANK (1-8 factory, U1-U16 user) and SLOT step one at a time; PRESET runs through all 192, and MPC's
   own PRESET menu lists them by name. **Saving** (0.18): pick a user slot with **SAVE TO** (it shows what's in it) and

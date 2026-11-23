@@ -129,6 +129,24 @@ def badge(letter, col):
     return im.resize((30, 30), Image.LANCZOS)
 
 
+def file_placeholder(col):
+    """a wavetable file's 3D view as the skin ships it: the MPC plugin draws the real one into this file (its fixed
+    name: skin_post.py) when a file is picked; until MPC loads that, this says how to see it"""
+    w, h = W * SS, H * SS
+    im = Image.new("RGBA", (w, h), BG + (255,))
+    d = ImageDraw.Draw(im)
+    font = ImageFont.truetype(str(PORT / "fonts" / "BarlowSemiCondensed-Bold.ttf"), 30 * SS)
+    small = ImageFont.truetype(str(PORT / "fonts" / "BarlowSemiCondensed-Bold.ttf"), 22 * SS)
+    d.text((w / 2, h / 2 - 20 * SS), "DRAWING YOUR WAVETABLE", font=font, fill=col, anchor="mm")
+    d.text((w / 2, h / 2 + 22 * SS), "CLOSE AND REOPEN THE PLUGIN TO SEE IT", font=small, fill=(0x8C, 0x96, 0xA1), anchor="mm")
+    d.rectangle([0, 0, w - 1, h - 1], outline=LINE, width=SS)
+    fr = im.resize((W, H), Image.LANCZOS).convert("RGB")
+    s = Image.new("RGB", (W, H * FRAMES))
+    for n in range(FRAMES):
+        s.paste(fr, (0, n * H))
+    return s
+
+
 def main(gen):
     ART.mkdir(exist_ok=True)
     banks = factory(gen)
@@ -138,6 +156,9 @@ def main(gen):
             q.save(ART / f"wt{wave}_{b}.png", optimize=True)
     user_view().quantize(colors=COLOURS, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(
         ART / "wt_user.png", optimize=True)
+    for wave, col in ((1, ACC), (2, ACC2)):                 # a file's 3D view, until the plugin draws it
+        file_placeholder(col).quantize(colors=COLOURS, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(
+            ART / f"wt{wave}_file.png", optimize=True)
     for letter, col in (("a", ACC), ("b", ACC2)):           # a user table's columns, per oscillator colour
         column_strip(col).save(ART / f"wtcol_{letter}.png", optimize=True)
     for letter, col in (("A", ACC), ("B", ACC2)):           # the editor's badges beside OSC A / OSC B

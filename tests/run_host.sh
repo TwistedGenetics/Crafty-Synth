@@ -36,8 +36,11 @@ python3 tests/host/wav_ref.py build/host/wav build/host/wav_test
 python3 tools/gen_presets.py --keys build/gen/cr_keys.h
 # shellcheck disable=SC2086
 $CC $W $SAN -Wno-unused-parameter -Isrc/host -Iports/mpc -Iexternal/mpc-vst-plugins/wrapper tests/host/mpc_test.c \
-    ports/mpc/cr_mpc.c src/host/cr_inst.c src/host/cr_wav.c src/host/cr_tables.c $CORE -lm -o build/host/mpc_test
-build/host/mpc_test build/host
+    ports/mpc/cr_mpc.c src/host/cr_inst.c src/host/cr_wav.c src/host/cr_tables.c $CORE -lm -lpthread -o build/host/mpc_test
+mkdir -p build/host/mpc/data "build/host/mpc/Plugin Skins"
+build/host/mpc_test build/host/mpc/data
+# the 3D picture the MPC plugin drew of a wavetable file: a PNG that opens, its middle frame kept to look at
+python3 -c "from PIL import Image; im = Image.open('build/host/mpc/Plugin Skins/sh_crafty_file2.png'); assert im.size == (560, 180 * 17), im.size; im.crop((0, 180 * 8, 560, 180 * 9)).save('build/host/p_mpc_file3d.png'); print('ok   mpc: the 3D picture of a file opens', im.size)"
 build/host/inst_test
 # shellcheck disable=SC2086
 $CC $W -Wno-unused-parameter -Wno-sign-compare -Ix0x-firmware/firmware/src tests/host/cr_host.c $CORE -o build/host/cr_host

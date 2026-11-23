@@ -115,7 +115,7 @@ int main(void)
             printf(", ");
             js(CR_BANK_NAME[i]);
         }
-        printf("], \"default\": 1}");
+        printf(", \"FILE\"], \"default\": 1}");   /* 0.20: a file the plugin has drawn in 3D */
     }
     /* 0.17: each oscillator's wavetable list: the factory banks, then the files in data/Wavetables in folder order.
      * w<n>wt is the place in it (the dial), _prev / _next its box's arrows, w<n>list opens the list, w<n>row_1..8 its
