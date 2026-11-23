@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9 beta (2026-11-23)
+
+- **The AU / VST3 window is one GUI again, scaled from its corner**: every panel in one landscape layout (two rows of
+  panels, the pattern, keyboard and wavetables below) instead of 0.8's pages, and dragging the window's corner
+  scales the whole GUI, keeping its shape, as other synths do. The SIZE menu is gone. The project keeps the size.
+- FM-1, editor and MPC: unchanged.
+
 ## 0.8 beta (2026-11-22)
 
 - **Every parameter is a mod destination** (74, was 44), on the FM-1, the editor, the plugin and the MPC: banks,

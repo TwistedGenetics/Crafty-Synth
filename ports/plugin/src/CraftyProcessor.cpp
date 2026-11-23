@@ -352,7 +352,7 @@ const juce::String CraftyProcessor::getProgramName(int index)
 
 // --------------------------------------------------------------------------------------------- state ---
 // "CRS1", the preset it came from (2 bytes), dirty, 0, then the patch (128 bytes), the globals (16) and the window:
-// "UI", its width and height (2 bytes each, little-endian) and the SIZE choice (a 0-terminated string)
+// "UI", its width and height (2 bytes each, little-endian) and the layout's aspect x 1000 (2 bytes)
 void CraftyProcessor::getStateInformation(juce::MemoryBlock &dest)
 {
     const juce::ScopedLock sl(lock);
@@ -363,7 +363,9 @@ void CraftyProcessor::getStateInformation(juce::MemoryBlock &dest)
     const uint8_t ui[6] = {'U', 'I', (uint8_t)(editorW & 0xFF), (uint8_t)(editorW >> 8), (uint8_t)(editorH & 0xFF),
                            (uint8_t)(editorH >> 8)};
     dest.append(ui, sizeof ui);
-    dest.append(uiScale.toRawUTF8(), uiScale.getNumBytesAsUTF8() + 1);
+    const int asp = juce::roundToInt(layoutAspect * 1000.0);
+    const uint8_t a2[2] = {(uint8_t)(asp & 0xFF), (uint8_t)(asp >> 8)};
+    dest.append(a2, sizeof a2);
 }
 void CraftyProcessor::setStateInformation(const void *data, int size)
 {
@@ -387,16 +389,12 @@ void CraftyProcessor::setStateInformation(const void *data, int size)
             if (cr_globals_check(&g) == 0)
                 inst->g = g;
         }
-        if (size >= uat + 7 && d[uat] == 'U' && d[uat + 1] == 'I') {   /* the window (0.8 on) */
-            editorW = juce::jlimit(600, 4000, d[uat + 2] | d[uat + 3] << 8);
+        if (size >= uat + 8 && d[uat] == 'U' && d[uat + 1] == 'I') {   /* the window (0.8 on) */
+            editorW = juce::jlimit(700, 4000, d[uat + 2] | d[uat + 3] << 8);
             editorH = juce::jlimit(400, 3000, d[uat + 4] | d[uat + 5] << 8);
-            const char *t = (const char *)d + uat + 6;
-            int n = 0;
-            while (n < 16 && uat + 6 + n < size && t[n])
-                n++;
-            uiScale = juce::String::fromUTF8(t, n);
-            if (uiScale.isEmpty())
-                uiScale = "whole";
+            const int asp = d[uat + 6] | d[uat + 7] << 8;
+            if (asp >= 500 && asp <= 4000)          /* (0.8's own state had a text here: ignored) */
+                layoutAspect = asp / 1000.0;
         }
     }
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())

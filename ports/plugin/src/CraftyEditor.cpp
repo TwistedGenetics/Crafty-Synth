@@ -46,10 +46,9 @@ CraftyEditor::CraftyEditor(CraftyProcessor &p)
               .withNativeIntegrationEnabled()
               .withKeepPageLoadedWhenBrowserIsHidden()
               .withResourceProvider(resource)
-              .withInitialisationData("uiScale", p.uiScale)
-              .withEventListener("crafty-ui", [this](const juce::var &v) {   // the editor's SIZE choice
+              .withEventListener("crafty-ui", [this](const juce::var &v) {   // the layout's shape: the window keeps it
                   if (auto *o = v.getDynamicObject())
-                      proc.uiScale = o->getProperty("scale").toString();
+                      setShape((double)o->getProperty("w"), (double)o->getProperty("h"));
               })
               .withEventListener("crafty-midi", [this](const juce::var &v) {
                   std::vector<uint8_t> f;
@@ -66,13 +65,27 @@ CraftyEditor::CraftyEditor(CraftyProcessor &p)
             a.add((int)b);
         web.emitEventIfBrowserIsVisible("crafty-midi", juce::var(a));
     };
-    setResizable(true, true);                       // drag the corner: the editor zooms to fit (its SIZE menu)
-    setResizeLimits(600, 400, 4000, 3000);
+    setResizable(true, true);                       // drag the corner: the whole GUI scales, as other synths do
+    setResizeLimits(700, 400, 4000, 3000);
+    if (proc.layoutAspect > 0.5)
+        getConstrainer()->setFixedAspectRatio(proc.layoutAspect);
     setSize(proc.editorW, proc.editorH);
     web.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 }
 
 CraftyEditor::~CraftyEditor() { proc.toEditor = nullptr; }
+
+void CraftyEditor::setShape(double w, double h)
+{
+    if (w < 100.0 || h < 100.0)
+        return;
+    const double a = w / h;
+    if (std::abs(a - proc.layoutAspect) < 0.002 && getConstrainer()->getFixedAspectRatio() > 0.0)
+        return;
+    proc.layoutAspect = a;
+    getConstrainer()->setFixedAspectRatio(a);
+    setSize(getWidth(), juce::roundToInt(getWidth() / a));   // the same width, the layout's height
+}
 
 void CraftyEditor::resized()
 {

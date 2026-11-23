@@ -95,7 +95,7 @@ int main()
         for (auto &f : toEd)
             sawCC |= f.size() == 3 && f[0] == 0xB0 && f[1] == CR_P[CR_CUT].cc && f[2] == 33;
         CHECK(sawCC, "the editor wasn't told about CUTOFF");
-        p.uiScale = "0.75";                          // the window's size and SIZE choice go with the project
+        p.layoutAspect = 1.62;                       // the window's size and shape go with the project
         p.editorW = 1500;
         p.editorH = 980;
         juce::MemoryBlock state;
@@ -144,8 +144,8 @@ int main()
             CHECK(q.getProgramName(64) == "U1-1 MY SAW", "a second instance doesn't see U1-1");
             q.setStateInformation(state.getData(), (int)state.getSize());
             pump();
-            CHECK(q.uiScale == "0.75" && q.editorW == 1500 && q.editorH == 980, "the window didn't come back: %s %dx%d",
-                  q.uiScale.toRawUTF8(), q.editorW, q.editorH);
+            CHECK(std::abs(q.layoutAspect - 1.62) < 0.002 && q.editorW == 1500 && q.editorH == 980,
+                  "the window didn't come back: %.3f %dx%d", q.layoutAspect, q.editorW, q.editorH);
             auto *qc = dynamic_cast<juce::RangedAudioParameter *>(q.getParameters()[CR_CUT]);
             CHECK((int)std::lround(qc->convertFrom0to1(qc->getValue())) == 33,
                   "state didn't restore CUTOFF");

@@ -71,9 +71,9 @@ public:
     std::function<void(const std::vector<uint8_t> &)> toEditor;
 
     void userAreaChanged();                         // another instance changed the shared user area
-    // the window: its size and the editor's SIZE choice ("whole", "width" or a scale), kept in the project
-    juce::String uiScale{"whole"};
-    int editorW = 1240, editorH = 900;
+    // the window: its size and the layout's shape (width / height), kept in the project
+    int editorW = 1440, editorH = 910;
+    double layoutAspect = 1.6;
     static constexpr int numParams = CR_NP;
 
 private:

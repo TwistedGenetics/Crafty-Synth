@@ -781,56 +781,35 @@ try { const s = localStorage.getItem("crafty-theme"); if (s !== null) th = +s; }
 $("theme").value = th;
 setTheme(th);
 addEventListener("resize", () => drawAll());
-/* the plugin's window: the editor laid out at one width and zoomed to the window. WHOLE: everything in view; WIDTH: the
-   width fits and the page scrolls; or a fixed size. The plugin keeps the choice (and the window's size) in the project. */
-const DESIGN_W = 1240;
-let uiScale = "whole";
+/* the plugin's window: every panel in one landscape layout (two rows of six, the pattern, keyboard and wavetables
+   below), drawn at one design size and scaled as a whole to the window, as plugins are. The plugin keeps the window
+   to this shape, so dragging its corner makes the whole GUI bigger or smaller. */
+const DESIGN_W = 2480;
+let lastH = 0;
+function layoutPlugin() {
+  const bottom = el("div", { class: "bottom" }), left = el("div", { class: "bottom-left" });
+  left.append($("seqpanel"), $("kb").closest("section"));
+  bottom.append(left, $("ubanks").closest("section"));
+  $("rack").after(bottom);
+}
 function applyScale() {
   if (!inPlugin) return;
   const root = document.documentElement;
   document.body.style.width = `${DESIGN_W}px`;
   root.style.zoom = "1";
   const h = Math.max(document.body.scrollHeight, 1);
-  const z = uiScale === "whole" ? Math.min(innerWidth / DESIGN_W, innerHeight / h) * 0.97
-    : uiScale === "width" ? innerWidth / DESIGN_W : +uiScale || 1;
-  root.style.zoom = String(Math.max(0.3, Math.min(3, z)));
-  document.body.style.overflowX = uiScale === "whole" || uiScale === "width" ? "hidden" : "auto";
-  root.style.overflowY = uiScale === "whole" ? "hidden" : "";
-  lastH = document.body.scrollHeight;
+  if (h !== lastH) {                               // the design's shape, for the window's corner
+    lastH = h;
+    window.__JUCE__.backend.emitEvent("crafty-ui", { w: DESIGN_W, h });
+  }
+  root.style.zoom = String(Math.max(0.2, Math.min(3, Math.min(innerWidth / DESIGN_W, innerHeight / h))));
+  seenH = document.body.scrollHeight;
 }
-let lastH = 0;
-/* the plugin's pages (Serum-style tabs, like the FM-1's pages): one row of panels each, the keyboard always below */
-const PAGES = ["OSC", "FILTER / ENV / LFO", "MATRIX / FX", "FX / ARP-SEQ", "WAVETABLES"];
-function buildPages() {
-  const rack = $("rack"), kids = [...rack.children];
-  kids.forEach((k, i) => (k.dataset.page = String(Math.min(3, Math.floor(i / 3)))));
-  $("seqpanel").dataset.page = "3";
-  $("ubanks").closest("section").dataset.page = "4";
-  const bar = el("nav", { class: "pages" });
-  const show = (n) => {
-    document.querySelectorAll("[data-page]").forEach((e) => e.classList.toggle("on", e.dataset.page === String(n)));
-    bar.querySelectorAll("button").forEach((b, j) => b.classList.toggle("on", j === n));
-    drawAll();
-    applyScale();
-  };
-  PAGES.forEach((p, i) => bar.append(el("button", { textContent: p, onclick: () => show(i) })));
-  rack.before(bar);
-  show(0);
-}
+let seenH = 0;
 if (inPlugin) {
-  buildPages();
-  const init = (window.__JUCE__.initialisationData || {}).uiScale;
-  const s = Array.isArray(init) ? init[0] : init;
-  if (typeof s === "string" && s) uiScale = s;
-  $("sizebox").hidden = false;
-  $("uisize").value = uiScale;
-  $("uisize").onchange = () => {
-    uiScale = $("uisize").value;
-    applyScale();
-    window.__JUCE__.backend.emitEvent("crafty-ui", { scale: uiScale });
-  };
+  layoutPlugin();
   addEventListener("resize", applyScale);
-  setInterval(() => { if (document.body.scrollHeight !== lastH) applyScale(); }, 1000);   // a panel grew: re-fit
+  setInterval(() => { if (document.body.scrollHeight !== seenH) applyScale(); }, 1000);   // a panel grew: re-fit
   setTimeout(applyScale, 0);
 }
 if (inPlugin) {
