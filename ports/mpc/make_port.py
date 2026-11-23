@@ -132,11 +132,11 @@ OSC_SECTIONS = ("OSC A", "OSC B")
 VIEW_W, VIEW_H = 560, 180
 OSC = (
     ("A", 1, [("knob", "w1pos", "WT POS"), ("knob", "omamt", "OSC MOD"), ("popup", "ommode", "MOD MODE"),
-              ("knob", "table1", "TABLE FILE"), ("knob", "mix", "MIX"), ("knob", "spread", "SPREAD"),
-              ("knob", "glide", "GLIDE"), ("knob", "oct", "OCTAVE")], 8),
+              ("knob", "mix", "MIX"), ("knob", "spread", "SPREAD"), ("knob", "glide", "GLIDE"), ("knob", "oct", "OCTAVE")], 8),
     ("B", 2, [("knob", "w2pos", "WT POS"), ("knob", "tune", "TUNE"), ("knob", "fine", "FINE"),
-              ("knob", "bamt", "B MOD"), ("popup", "bmode", "B MODE"), ("knob", "table2", "TABLE FILE")], 9),
+              ("knob", "bamt", "B MOD"), ("popup", "bmode", "B MODE")], 9),
 )
+LIST_ROWS, ROW_H = 8, 68
 
 
 def cells_svg(boxes):
@@ -184,7 +184,7 @@ def with_cells(layout):
             if not f:
                 continue
             x, y, w, h = map(int, f.groups())
-            boxes = [(cx - 70, cy - 52, 140, 152) for cx, cy in ctrls if x <= cx < x + w and y <= cy < y + h]
+            boxes = [(cx - 70, cy - 52, 140, 152) for cx, cy in ctrls if x <= cx < x + w and y + 60 <= cy < y + h]
             if boxes:
                 name = f"art/cells_{n}_{len([k for k in files if k.startswith(f'art/cells_{n}_')])}.svg"
                 files[name] = cells_svg(boxes)
@@ -194,15 +194,19 @@ def with_cells(layout):
 
 
 def osc_tab():
+    """the OSC page: per oscillator its badge and name, its WAVETABLE box (the factory banks, then your files in
+    data/Wavetables in folder order: arrows, the dial, or LIST for the whole list over the panel), the 3D view, the
+    controls"""
     out, keys = ["[tab OSC]"], []
-    for n in range(len(OSC)):                           # the panels, then the cells on them
+    for n in range(len(OSC)):                           # the panels first (the cells go on them)
         out.append(f'frame x={10 + n * 634} y=92 w=626 h=616 title=""')
     for n, (letter, wave, ctrls, banks) in enumerate(OSC):
         x, y, w, h = 10 + n * 634, 92, 626, 616
         out.append(f'art file=art/badge_{letter.lower()}.png x={x + 18} y={y + 15} w=30 h=30')
         out.append(f'text cx={x + 60} cy={y + 30} label="OSC {letter}" size=2.4 align=left color=e8ecef '
                    f'fontfile=fonts/BarlowSemiCondensed-Bold.ttf case=none')
-        out.append(f'popup cx={x + w - 128} cy={y + 30} w=220 h=44 label="" key=w{wave}bank tsize=20')
+        out.append(f'stepper cx={x + 330} cy={y + 30} w=320 h=44 label="" key=w{wave}wt tsize=20')
+        out.append(f'button cx={x + w - 66} cy={y + 30} label="LIST" label_on="CLOSE" key=w{wave}list')
         vx, vy = x + (w - VIEW_W) // 2, y + 58
         out.append(f'art file=art/wt_user.png x={vx} y={vy} w={VIEW_W} h={VIEW_H}')
         for b in range(banks):
@@ -211,11 +215,13 @@ def osc_tab():
         for i, (kind, key, label) in enumerate(ctrls):
             cx, cy = x + 88 + 150 * (i % 4), y + 318 + 160 * (i // 4)
             if kind == "knob":
-                out.append(f'knob cx={cx} cy={cy} r=36 label="{label}" key={key} ns=17 vs=19')
+                out.append(f'knob cx={cx} cy={cy} r=36 label="{label}" key={key} ns=17 vs=19 when=w{wave}list:0')
             else:
-                out.append(f'popup cx={cx} cy={cy + 20} w=134 h=48 label="{label}" key={key} tsize=18')
+                out.append(f'popup cx={cx} cy={cy + 20} w=134 h=48 label="{label}" key={key} tsize=18 when=w{wave}list:0')
             keys.append(key)
-    keys += ["w1bank", "w2bank"]
+        keys.append(f"w{wave}wt")
+        out.append(f'list x={x + 18} y={y + 58} w={w - 36} h={LIST_ROWS * ROW_H} key=w{wave}row cols=1 rows={LIST_ROWS} '
+                   f'th={ROW_H} gap=0 tsize=26 talign=left when=w{wave}list:1')
     out.append(f'qlinks "OSC" = {",".join(keys)}')
     return "\n".join(out) + "\n\n"
 

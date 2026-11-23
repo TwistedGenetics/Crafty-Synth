@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.17 beta (2026-11-23)
+
+- **MPC: one wavetable list per oscillator.** The box at the top of OSC A and OSC B lists the factory banks first, then
+  every WAV in `data/Wavetables` in folder order (a folder's files together, shown as "Basses / Growl"). Turn the
+  oscillator's Q-Link (or tap the box's arrows) to move through it, or tap **LIST** for the whole list over the
+  panel (eight rows, scrolling with the selection; tap one to play it, CLOSE to go back). The TABLE 1 / TABLE 2 dials
+  and the separate bank lists are gone from the OSC page. The project keeps a file by its path.
+- FM-1, editor and AU / VST3: unchanged.
+
 ## 0.16 beta (2026-11-23)
 
 - **FM-1: no big number over the screen.** Turning a knob lights its cell and the page's picture follows it live: the

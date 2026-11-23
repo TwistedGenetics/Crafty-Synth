@@ -37,6 +37,8 @@ typedef struct {
     int16_t waves[2][5][CR_WT_N];
     int rkeep;                                  /* RANDOM keeps the tables */
     uint32_t rdepth;                            /* RANDOM's depth, 0..127 (0.16) */
+    int list[2], top[2];                        /* 0.17: the wavetable list open, its first row's item */
+    int wt[2];                                  /* w1wt / w2wt as last reported (-1: not yet) */
     int tpos[2];                                /* table1 / table2 as last reported (-1: not yet) */
     int shown[2];                               /* the 3D views' bank as last reported (w1shown, w2shown; -1: not yet) */
     uint32_t seed;
@@ -157,6 +159,70 @@ static int shown_of(const mpc_t *m, int k)
     uint32_t b = cr_bank_of(m->in.p.p[k ? CR_W2BANK : CR_W1BANK], k);
     return m->in.file[k] || b >= CR_NBANK ? 0 : (int)b + 1;
 }
+/* ---- 0.17: each oscillator's wavetable list: its factory banks (8, or 9 with sine / noise on OSC B), then the
+ * files in data/Wavetables in folder order (by path: a folder's files together). One place in it, w<n>wt. ---- */
+#define NROW 8
+static int nfac(int k) { return k ? (int)CR_NBANK : (int)CR_BANK_NOISE; }
+static int wt_count(int k) { return nfac(k) + (int)TABS.nsorted; }
+static int wt_of(const mpc_t *m, int k)        /* where the oscillator is in its list */
+{
+    uint32_t b;
+    if (cr_tables_present(&TABS, m->file[k]))
+        return nfac(k) + (int)TABS.pos[m->file[k]];
+    b = cr_bank_of(m->in.p.p[k ? CR_W2BANK : CR_W1BANK], k);
+    return (int)b < nfac(k) ? (int)b : 0;      /* (a user bank from an older patch: shown as the first) */
+}
+static void wt_name(const mpc_t *m, int k, int i, char *b, int n)   /* "ANALOGUE", "Basses / Growl" */
+{
+    const char *p;
+    int j = 0;
+    if (i < 0 || i >= wt_count(k)) {
+        b[0] = 0;
+        return;
+    }
+    if (i < nfac(k)) {
+        snprintf(b, (size_t)n, "%s", CR_BANK_NAME[i]);
+        return;
+    }
+    p = cr_tables_path(&TABS, cr_tables_at(&TABS, (uint32_t)(i - nfac(k))));
+    for (; p && *p && j < n - 4; p++) {         /* the folder's '/' spaced out; ".wav" dropped */
+        if (*p == '/') {
+            b[j++] = ' ';
+            b[j++] = '/';
+            b[j++] = ' ';
+        } else
+            b[j++] = *p;
+    }
+    b[j] = 0;
+    if (j > 4 && !strcasecmp(b + j - 4, ".wav"))
+        b[j - 4] = 0;
+    (void)m;
+}
+static void wt_follow(mpc_t *m, int k)          /* the list's window keeps the oscillator's table in sight */
+{
+    int i = wt_of(m, k), n = wt_count(k);
+    if (i < m->top[k])
+        m->top[k] = i;
+    if (i >= m->top[k] + NROW)
+        m->top[k] = i - NROW + 1;
+    if (m->top[k] > n - NROW)
+        m->top[k] = n - NROW;
+    if (m->top[k] < 0)
+        m->top[k] = 0;
+}
+static void wt_set(mpc_t *m, int k, int i)      /* the oscillator plays its list's item i */
+{
+    int n = wt_count(k);
+    i = i < 0 ? 0 : i >= n ? n - 1 : i;
+    if (i < nfac(k)) {
+        if (m->file[k] || m->fpath[k][0])
+            set_file(m, k, 0);
+        cr_inst_param(&m->in, k ? CR_W2BANK : CR_W1BANK, cr_bank_val((uint32_t)i, k));
+    } else
+        set_file(m, k, cr_tables_at(&TABS, (uint32_t)(i - nfac(k))));
+    wt_follow(m, k);
+}
+
 static int saved_slot(void *ctx, uint32_t slot) { return cr_user_saved(((mpc_t *)ctx)->user, slot); }
 static void random_patch(mpc_t *m)
 {
@@ -224,6 +290,7 @@ static void *create(const char *dir)
     m->shown[0] = m->shown[1] = -1;
     m->tpos[0] = m->tpos[1] = -1;
     m->rdepth = 32u;
+    m->wt[0] = m->wt[1] = -1;
     return m;
 }
 static void destroy(void *p) { free(p); }
@@ -328,6 +395,31 @@ static void set_param(void *p, const char *key, const char *val)
         tabs_rescan();                          /* files added since: their places (reported if this one's moved) */
         return;
     }
+    if ((key[0] == 'w' && (key[1] == '1' || key[1] == '2')) && !strncmp(key + 2, "wt", 2)) {   /* the wavetable list */
+        int k = key[1] - '1', v = (int)(atof(val) + 0.5);
+        if (!key[4]) {                          /* w<n>wt: the dial */
+            if (v != wt_of(m, k))
+                wt_set(m, k, v);
+            tabs_rescan();
+        } else if (atof(val) > 0.5)             /* the box's arrows */
+            wt_set(m, k, wt_of(m, k) + (!strcmp(key + 4, "_next") ? 1 : -1));
+        return;
+    }
+    if (key[0] == 'w' && (key[1] == '1' || key[1] == '2') && !strcmp(key + 2, "list")) {
+        int k = key[1] - '1';
+        m->list[k] = atoi(val) == 1;
+        if (m->list[k]) {
+            tabs_rescan();
+            wt_follow(m, k);
+        }
+        return;
+    }
+    if (key[0] == 'w' && (key[1] == '1' || key[1] == '2') && !strncmp(key + 2, "row_", 4)) {   /* a row tapped */
+        int k = key[1] - '1', r = atoi(key + 6);
+        if (atof(val) > 0.5 && r >= 1 && r <= NROW && m->top[k] + r - 1 < wt_count(k))
+            wt_set(m, k, m->top[k] + r - 1);
+        return;
+    }
     if (!strcmp(key, "random")) {               /* a trigger: it springs back to 0 */
         if (atof(val) > 0.5)
             random_patch(m);
@@ -387,6 +479,28 @@ static int get_param(void *p, const char *key, char *buf, int n)
     }
     if (!strcmp(key, "random"))
         return snprintf(buf, (size_t)n, "0");
+    if (key[0] == 'w' && (key[1] == '1' || key[1] == '2')) {   /* the wavetable list */
+        int k = key[1] - '1';
+        if (!strcmp(key + 2, "wt"))
+            return snprintf(buf, (size_t)n, "%d", wt_of(m, k));
+        if (!strcmp(key + 2, "wt_display")) {
+            if (m->fpath[k][0] && !cr_tables_present(&TABS, m->file[k]))
+                return snprintf(buf, (size_t)n, "MISSING FILE");
+            wt_name(m, k, wt_of(m, k), buf, n);
+            return (int)strlen(buf);
+        }
+        if (!strcmp(key + 2, "wt_prev") || !strcmp(key + 2, "wt_next"))
+            return snprintf(buf, (size_t)n, "0");
+        if (!strcmp(key + 2, "list"))
+            return snprintf(buf, (size_t)n, "%d", m->list[k]);
+        if (!strncmp(key + 2, "row_", 4)) {
+            int r = atoi(key + 6), i = m->top[k] + r - 1;
+            if (strstr(key, "_on"))
+                return snprintf(buf, (size_t)n, "%d", i == wt_of(m, k) ? 1 : 0);
+            wt_name(m, k, i, buf, n);           /* (its text, also as "_display") */
+            return (int)strlen(buf);
+        }
+    }
     if (!strcmp(key, "w1shown") || !strcmp(key, "w2shown"))
         return snprintf(buf, (size_t)n, "%d", shown_of(m, key[1] - '1'));
     if (!strcmp(key, "rkeep"))
@@ -467,6 +581,13 @@ int mpc_engine_changed(void *p, char *key, int len)
         snprintf(key, (size_t)len, "%s", k < 3 ? PK[k] : k < 3 + (int)CR_NP ? KEYS[k - 3] : k == 3 + (int)CR_NP ? "table1" : "table2");
         return 1;
     }
+    for (k = 0; k < 2; k++)                     /* the wavetable list's place (a bank, a file, new files) */
+        if (wt_of(m, k) != m->wt[k]) {
+            m->wt[k] = wt_of(m, k);
+            wt_follow(m, k);
+            snprintf(key, (size_t)len, "w%dwt", k + 1);
+            return 1;
+        }
     for (k = 0; k < 2; k++)                     /* a file's place by name moved (new files in the folder) */
         if (tpos_of(m, k) != m->tpos[k]) {
             m->tpos[k] = tpos_of(m, k);

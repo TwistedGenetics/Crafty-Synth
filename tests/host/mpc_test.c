@@ -87,7 +87,7 @@ int main(int argc, char **argv)
     i = 0;
     while (mpc_engine_changed(m, key, sizeof key))
         i++;
-    CHECK(i >= 3 + (int)CR_NP + 2 && i <= 3 + (int)CR_NP + 6, "a preset reported %d keys", i);
+    CHECK(i >= 3 + (int)CR_NP + 2 && i <= 3 + (int)CR_NP + 8, "a preset reported %d keys", i);
     e->set_param(m, "pslot", "3");
     CHECK(!strcmp(get(e, m, "preset"), "66"), "slot 3: preset %s", get(e, m, "preset"));
     /* a CC on the track: the screen is told */
@@ -132,6 +132,28 @@ int main(int argc, char **argv)
         e->set_param(m, "table2", "2");
         e->set_param(m, "res", "99");
     }
+    /* 0.17: the wavetable list: 8 factory banks on OSC A, then the files in folder order */
+    {
+        e->set_param(m, "w1wt", "8");
+        CHECK(!strcmp(get(e, m, "w1wt_display"), "Basses / Acid"), "w1wt 8: %s", get(e, m, "w1wt_display"));
+        e->set_param(m, "w1wt_next", "1");
+        CHECK(!strcmp(get(e, m, "w1wt"), "9") && !strcmp(get(e, m, "w1wt_display"), "Leads / Saw Up"), "next: %s %s",
+              get(e, m, "w1wt"), get(e, m, "w1wt_display"));
+        e->set_param(m, "w1wt_next", "1");      /* the end of the list: it stays */
+        CHECK(!strcmp(get(e, m, "w1wt"), "9"), "past the end: %s", get(e, m, "w1wt"));
+        e->set_param(m, "w1list", "1");
+        CHECK(!strcmp(get(e, m, "w1row_8"), "Leads / Saw Up") && !strcmp(get(e, m, "w1row_8_on"), "1") &&
+              !strcmp(get(e, m, "w1row_1"), "MATH"), "rows (window from MATH)");
+        e->set_param(m, "w1row_3", "1");        /* a factory bank tapped: the file goes */
+        CHECK(!strcmp(get(e, m, "w1wt_display"), "CURATED 1") && !strcmp(get(e, m, "table1_display"), "BANK"),
+              "row 3: %s", get(e, m, "w1wt_display"));
+        e->set_param(m, "w1wt", "0");
+        CHECK(!strcmp(get(e, m, "w1wt_display"), "ANALOGUE"), "w1wt 0: %s", get(e, m, "w1wt_display"));
+        e->set_param(m, "w2wt", "10");          /* OSC B: 9 factory banks (sine / noise too) */
+        CHECK(!strcmp(get(e, m, "w2wt_display"), "Leads / Saw Up"), "w2wt 10: %s", get(e, m, "w2wt_display"));
+        while (mpc_engine_changed(m, key, sizeof key))
+            ;
+    }
     /* state into a second instance */
     e->set_param(m, "cut", "77");
     strcpy(state, get(e, m, "state"));
@@ -139,7 +161,7 @@ int main(int argc, char **argv)
     e->set_param(m2, "state", state);
     CHECK(!strcmp(get(e, m2, "cut"), "77") && !strcmp(get(e, m2, "res"), "99") && !strcmp(get(e, m2, "preset"), "66"),
           "state: cut %s res %s", get(e, m2, "cut"), get(e, m2, "res"));
-    CHECK(!strcmp(get(e, m2, "table2_display"), "Saw Up"), "state: table2 %s", get(e, m2, "table2_display"));
+    CHECK(!strcmp(get(e, m2, "w2wt_display"), "Leads / Saw Up"), "state: w2wt %s", get(e, m2, "w2wt_display"));
     /* sound */
     {
         uint8_t on[3] = {0x90, 57, 110};

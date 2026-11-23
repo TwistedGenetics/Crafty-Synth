@@ -7,7 +7,7 @@ Copy it here again whenever you want the MPC to have your latest ones. When you 
 (or copy the file in again).
 
 Your wavetables (0.15): put WAVs (Serum and Vital tables, or single cycles; sub-folders are fine) in the Wavetables
-folder here. TABLE FILE (on the OSC page, under each oscillator) steps through them by name and plays the one
-shown in place of its bank; 0 is the bank. Each file also gets a number for good in TableIndex.txt, the same file the Twisted Tracker's CRAFTY and the Mac plugin keep, so
+folder here. Each oscillator's WAVETABLE box (top of the OSC page) lists the factory banks, then your files in
+folder order: turn its Q-Link, tap its arrows, or tap LIST to see them all. Each file also gets a number for good in TableIndex.txt, the same file the Twisted Tracker's CRAFTY and the Mac plugin keep, so
 copy Wavetables and TableIndex.txt together between them and the numbers match. RANDOM (page PRESET) picks a preset
 and varies it; RND TABLES = KEEP leaves the banks and files as they are.

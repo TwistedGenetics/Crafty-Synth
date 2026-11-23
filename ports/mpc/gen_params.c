@@ -117,6 +117,23 @@ int main(void)
         }
         printf("], \"default\": 1}");
     }
+    /* 0.17: each oscillator's wavetable list: the factory banks, then the files in data/Wavetables in folder order.
+     * w<n>wt is the place in it (the dial), _prev / _next its box's arrows, w<n>list opens the list, w<n>row_1..8 its
+     * rows (their text from the engine) */
+    for (k = 1; k <= 2; k++) {
+        printf(",\n  {\"key\": \"w%uwt\", \"name\": \"WAVETABLE %u\", \"min\": 0, \"max\": %u, \"default\": 0, "
+               "\"display\": \"int\", \"dynamic_display\": true, \"refresh_display\": true, \"nudge_pct\": 1}",
+               k, k, CR_NBANK + CR_TABLES_MAX);
+        printf(",\n  {\"key\": \"w%uwt_prev\", \"name\": \"TABLE %u BACK\", \"min\": 0, \"max\": 1, \"default\": 0, "
+               "\"type\": \"trigger\", \"momentary\": true}", k, k);
+        printf(",\n  {\"key\": \"w%uwt_next\", \"name\": \"TABLE %u ON\", \"min\": 0, \"max\": 1, \"default\": 0, "
+               "\"type\": \"trigger\", \"momentary\": true}", k, k);
+        printf(",\n  {\"key\": \"w%ulist\", \"name\": \"TABLE %u LIST\", \"options\": [\"CLOSED\", \"OPEN\"], \"default\": 0}",
+               k, k);
+        for (i = 1; i <= 8; i++)
+            printf(",\n  {\"key\": \"w%urow_%u\", \"name\": \"TABLE %u ROW %u\", \"min\": 0, \"max\": 1, \"default\": 0, "
+                   "\"display\": \"string\"}", k, i, k, i);
+    }
     printf("\n ],\n \"sections\": [\n");
     for (s = 0; s < sizeof SECTIONS / sizeof SECTIONS[0]; s++) {
         printf("%s  {\"label\": ", s ? ",\n" : "");

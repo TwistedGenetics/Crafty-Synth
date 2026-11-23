@@ -75,7 +75,7 @@ A project saved on one MPC opens on any other.
 
 | Page | Controls |
 |---|---|
-| OSC | the editor's two oscillator panels: each bank's wavetable in 3D (as the editor draws it, following WT POS), the bank list in the head · OSC A: WT POS, OSC MOD, MOD MODE, TABLE FILE, MIX, SPREAD, GLIDE, OCTAVE · OSC B: WT POS, TUNE, FINE, B MOD, B MODE, TABLE FILE |
+| OSC | the editor's two oscillator panels: the WAVETABLE box and LIST in the head, each bank's wavetable in 3D (following WT POS) · OSC A: WT POS, OSC MOD, MOD MODE, MIX, SPREAD, GLIDE, OCTAVE, WAVETABLE · OSC B: WT POS, TUNE, FINE, B MOD, B MODE, WAVETABLE |
 | FILTER | sub level, octave, wave · cutoff, reso, morph, type, filter EG, distortion |
 | ENVELOPE | the filter envelope · the amp envelope, amp EG amount, volume |
 | MOD | the mod envelope · LFO 1 · LFO 2 (rate, shape, mode, sync) |
@@ -94,10 +94,11 @@ waves are only known on the MPC) and follows WT POS in 16 steps; touching it mov
   filter types, reverb modes, matrix destinations) open as pop-ups.
 - **Your user presets**: copy `Crafty Synth.user` from your Mac (path above) into the plugin's `data`
   folder on the MPC (`VST2 Plugins/Twisted Genetics - VST - Crafty Synth/data/`).
-- **Your wavetables** (0.15, as on the Twisted Tracker): put WAVs in `data/Wavetables` (sub-folders too). **TABLE FILE**
-  on the OSC page steps through them in name order, folders together (0: the bank), and plays the one shown in place of
-  that oscillator's bank; the bank lists hold the factory banks only. The project keeps the file by its path. Files you
-  add are picked up as you browse (at most every 20 s). `data/TableIndex.txt` numbers them as the Tracker and the Mac do.
+- **Your wavetables** (0.17): put WAVs in `data/Wavetables` (sub-folders too). Each oscillator's **WAVETABLE** box
+  (top of its panel on the OSC page) is one list: the factory banks, then your files in folder order (a folder's files
+  together, "Basses / Growl"). Turn its Q-Link or tap the arrows to move through it, or tap **LIST** to see eight rows
+  at a time over the panel and tap one. The project keeps a file by its path; files you add appear as you browse (at
+  most every 20 s). `data/TableIndex.txt` numbers them as the Tracker and the Mac do.
 - **RANDOM** (a button on the PRESET page) picks a preset and varies it, as the FM-1's, by **RND DEPTH**; **RND TABLES** =
   KEEP leaves the banks and files alone, NEW gives each oscillator a random factory bank and, half the time, one of your
   files.
