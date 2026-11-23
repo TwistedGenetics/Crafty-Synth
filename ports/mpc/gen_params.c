@@ -140,6 +140,12 @@ int main(void)
            "\"dynamic_display\": true, \"refresh_display\": true, \"nudge_pct\": 2}", CR_NUSER - 1u);
     printf(",\n  {\"key\": \"ssave\", \"name\": \"SAVE\", \"min\": 0, \"max\": 1, \"default\": 0, \"type\": \"trigger\", "
            "\"momentary\": true}");
+    /* 0.19: a user table's view (a file or a user bank: its waves are only known on the MPC): 56 columns per
+     * oscillator, each a height 0..32 (16 = the centre) the engine sets from the wave at WT POS */
+    for (k = 1; k <= 2; k++)
+        for (i = 1; i <= 56; i++)
+            printf(",\n  {\"key\": \"w%uc_%u\", \"name\": \"VIEW %u COL %u\", \"min\": 0, \"max\": 32, \"default\": 16, "
+                   "\"display\": \"int\"}", k, i, k, i);
     printf("\n ],\n \"sections\": [\n");
     for (s = 0; s < sizeof SECTIONS / sizeof SECTIONS[0]; s++) {
         printf("%s  {\"label\": ", s ? ",\n" : "");

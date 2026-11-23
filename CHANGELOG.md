@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.19 beta (2026-11-23)
+
+MPC only:
+- **Your wavetables drawn**: a file from `data/Wavetables` (or a user bank) now shows its own wave in the OSC view, at
+  WT POS (its five waves morphed as it plays), drawn as 56 columns, instead of the YOUR WAVETABLE panel. Factory banks
+  keep their 3D view.
+- **No Q-Link outline**: the box MPC drew around the Q-Link column in use is gone (it stayed over open lists).
+
 ## 0.18 beta (2026-11-23)
 
 MPC only (the FM-1, editor and AU / VST3 play and look as before):

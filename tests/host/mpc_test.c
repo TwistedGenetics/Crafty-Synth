@@ -151,6 +151,11 @@ int main(int argc, char **argv)
         CHECK(!strcmp(get(e, m, "w1wt_display"), "ANALOGUE"), "w1wt 0: %s", get(e, m, "w1wt_display"));
         e->set_param(m, "w2wt", "10");          /* OSC B: 9 factory banks (sine / noise too) */
         CHECK(!strcmp(get(e, m, "w2wt_display"), "Leads / Saw Up"), "w2wt 10: %s", get(e, m, "w2wt_display"));
+        {   /* 0.19: its view draws the file's ramp: low columns at the left, high at the right */
+            int lo = atoi(get(e, m, "w2c_2")), hi = atoi(get(e, m, "w2c_55")), mid = atoi(get(e, m, "w2c_28"));
+            CHECK(lo < 6 && hi > 26 && mid > 12 && mid < 20, "w2 view columns %d %d %d", lo, mid, hi);
+            CHECK(!strcmp(get(e, m, "w2shown"), "0"), "w2shown %s", get(e, m, "w2shown"));
+        }
         while (mpc_engine_changed(m, key, sizeof key))
             ;
     }

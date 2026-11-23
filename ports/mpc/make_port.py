@@ -49,7 +49,6 @@ theme_tab_on_tx=14171b
 theme_seg_active=3fa9f5
 theme_seg_inactive=22272d
 theme_seg_active_tx=14171b
-qlink_bounds=column
 """
 
 
@@ -130,6 +129,7 @@ def locked_order(params):
 # art/wt_user.png), then two rows of controls in the editor's cells
 OSC_SECTIONS = ("OSC A", "OSC B")
 VIEW_W, VIEW_H = 560, 180
+VIEW_COLS = 56
 # per oscillator: its controls in two rows of up to four (None: an empty place), and its Q-Link columns: the
 # WAVETABLE box with the first row, then the second row (each column a neat box around what it turns)
 OSC = (
@@ -246,6 +246,10 @@ def osc_tab():
         out.append(f'button cx={x + w - 66} cy={y + 30} label="LIST" label_on="CLOSE" key=w{wave}list')
         vx, vy = x + (w - VIEW_W) // 2, y + 58
         out.append(f'art file=art/wt_user.png x={vx} y={vy} w={VIEW_W} h={VIEW_H}')
+        cw = VIEW_W // VIEW_COLS                        # a user table: its wave at WT POS, column by column
+        for c in range(VIEW_COLS):
+            out.append(f'meter cx={vx + c * cw + cw // 2} cy={vy + VIEW_H // 2} w={cw} h={VIEW_H} key=w{wave}c_{c + 1} '
+                       f'strip=art/wtcol_{letter.lower()}.png frames=33 when=w{wave}shown:0')
         for b in range(banks):
             out.append(f'meter cx={vx + VIEW_W // 2} cy={vy + VIEW_H // 2} w={VIEW_W} h={VIEW_H} key=w{wave}pos '
                        f'strip=art/wt{wave}_{b}.png frames=17 when=w{wave}shown:{b + 1}')

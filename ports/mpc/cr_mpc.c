@@ -28,6 +28,7 @@ static char KEYS[CR_NP][16];
 static int ready;
 
 #define POLY_MAX 8
+#define NCOL 56
 typedef struct {
     cr_inst_t in;
     uint8_t user[CR_USER_BYTES];
@@ -56,6 +57,7 @@ typedef struct {
     uint32_t sus_bits[4];
     float vbuf[2 * CR_INST_FRAMES];
     uint32_t sslot;                             /* SAVE TO: a user slot, 64..191 */
+    uint8_t col[2][NCOL];                       /* 0.19: a user table's view: its columns as last reported (0xFF: not yet) */
     int tpos[2];                                /* table1 / table2 as last reported (-1: not yet) */
     int shown[2];                               /* the 3D views' bank as last reported (w1shown, w2shown; -1: not yet) */
     uint32_t seed;
@@ -240,6 +242,33 @@ static void wt_set(mpc_t *m, int k, int i)      /* the oscillator plays its list
     wt_follow(m, k);
 }
 
+/* ---- 0.19: a user table's view: the wave at WT POS (its five waves morphed), as 56 columns of 0..32 ---- */
+static const int16_t (*user_waves(const mpc_t *m, int k))[CR_WT_N]
+{
+    uint32_t b;
+    if (m->in.file[k] && cr_tables_present(&TABS, m->file[k]))
+        return (const int16_t (*)[CR_WT_N])m->waves[k];
+    b = cr_bank_of(m->in.p.p[k ? CR_W2BANK : CR_W1BANK], k);
+    if (b >= CR_NBANK && b < CR_NBANK + CR_NUBANK) {
+        const cr_ubank_t *u = cr_user_bank(m->user, b - CR_NBANK);
+        if (u)
+            return (const int16_t (*)[CR_WT_N])u->w;
+    }
+    return 0;
+}
+static uint8_t view_col(const mpc_t *m, int k, int c)
+{
+    const int16_t (*w)[CR_WT_N] = user_waves(m, k);
+    float pos = (float)m->in.p.p[k ? CR_W2POS : CR_W1POS] / 127.f * 4.f, f, v;
+    int a = pos >= 4.f ? 3 : (int)pos, i = (c * CR_WT_N + CR_WT_N / 2) / NCOL;
+    if (!w)
+        return 16;
+    f = pos - (float)a;
+    v = ((float)w[a][i] + ((float)w[a + 1][i] - (float)w[a][i]) * f) / 26000.f;
+    v = v > 1.f ? 1.f : v < -1.f ? -1.f : v;
+    return (uint8_t)(16.f + v * 16.f + (v < 0.f ? -0.5f : 0.5f));
+}
+
 /* ---- 0.18: polyphony ---- */
 static void all_off(mpc_t *m);
 static const int VOICES[5] = {1, 2, 4, 6, 8};
@@ -420,6 +449,7 @@ static void *create(const char *dir)
     m->tpos[0] = m->tpos[1] = -1;
     m->rdepth = 32u;
     m->wt[0] = m->wt[1] = -1;
+    memset(m->col, 0xFF, sizeof m->col);
     m->nvoice = 8;                              /* 0.18: polyphonic unless VOICES is MONO (or the arp is on) */
     m->sslot = CR_NFACTORY;
     memset(m->vnote, 0xFF, sizeof m->vnote);
@@ -703,6 +733,10 @@ static int get_param(void *p, const char *key, char *buf, int n)
     }
     if (!strcmp(key, "ssave"))
         return snprintf(buf, (size_t)n, "0");
+    if (key[0] == 'w' && (key[1] == '1' || key[1] == '2') && key[2] == 'c' && key[3] == '_') {   /* a view column */
+        int k = key[1] - '1', c = atoi(key + 4) - 1;
+        return snprintf(buf, (size_t)n, "%d", c >= 0 && c < NCOL ? (int)view_col(m, k, c) : 16);
+    }
     if (!strcmp(key, "sslot"))
         return snprintf(buf, (size_t)n, "%u", (unsigned)(m->sslot - CR_NFACTORY));
     if (!strcmp(key, "sslot_display")) {        /* "U1-1 MY SAW", "U1-2 (EMPTY)" */
@@ -814,6 +848,18 @@ int mpc_engine_changed(void *p, char *key, int len)
             m->tpos[k] = tpos_of(m, k);
             snprintf(key, (size_t)len, "table%d", k + 1);
             return 1;
+        }
+    for (k = 0; k < 2; k++)                     /* a user table's view: the columns that moved */
+        if (!shown_of(m, k)) {
+            int c;
+            for (c = 0; c < NCOL; c++) {
+                uint8_t v = view_col(m, k, c);
+                if (v != m->col[k][c]) {
+                    m->col[k][c] = v;
+                    snprintf(key, (size_t)len, "w%dc_%d", k + 1, c + 1);
+                    return 1;
+                }
+            }
         }
     for (k = 0; k < 2; k++) {                   /* the 3D views follow the bank (or file) that plays */
         int s = shown_of(m, k);

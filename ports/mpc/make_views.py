@@ -82,26 +82,38 @@ def strip(d, bank, col):
     return s
 
 
+NCOL, LEVELS = 56, 33                # a user table's view: 56 columns, each one of 33 heights (16 up, 16 down)
+
+
+def column_strip(col):
+    """one column of a user table's view (its waves are only known on the MPC: the engine sets 56 columns' heights,
+    each a filmstrip of 33 frames): frame k fills from the centre line to (k - 16) / 16 of the height, capped bright"""
+    cw = W // NCOL
+    s = Image.new("RGBA", (cw, H * LEVELS), (0, 0, 0, 0))
+    d = ImageDraw.Draw(s)
+    amp = (H - 24) / 2
+    for k in range(LEVELS):
+        y0, mid = k * H, k * H + H // 2
+        v = (k - 16) / 16
+        top = mid - v * amp
+        d.rectangle([0, min(mid, top), cw - 1, max(mid, top)], fill=col + (int(255 * 0.32),))
+        d.rectangle([0, top - 1.5, cw - 1, top + 1.5], fill=col + (255,))
+    return s
+
+
 def user_view():
-    """a user bank or file: its waves are only known on the MPC, so a plain stack and its name in words"""
+    """a user bank or file's view behind its columns: the box, a faint grid and the centre line"""
     w, h = W * SS, H * SS
     im = Image.new("RGBA", (w, h), BG + (255,))
     lay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     g = ImageDraw.Draw(lay)
-    F = 15
-    dx, dy = w * 0.018, h * 0.035
-    fw = w - 16 * SS - dx * (F - 1)
-    amp = (h - 20 * SS - dy * (F - 1)) * 0.45
-    x0, base = 8 * SS, h - 10 * SS - amp
-    for f in range(F - 1, -1, -1):
-        ox, oy = x0 + f * dx, base - f * dy
-        g.line([(ox, oy), (ox + fw, oy)], fill=ACC + (int(255 * (0.10 + 0.2 * (1 - f / F))),), width=SS)
+    for gx in range(1, 8):                               # a faint grid
+        g.line([(w * gx / 8, 0), (w * gx / 8, h)], fill=LINE + (120,), width=SS)
+    for gy in (1, 3):
+        g.line([(0, h * gy / 4), (w, h * gy / 4)], fill=LINE + (120,), width=SS)
+    g.line([(0, h / 2), (w, h / 2)], fill=LINE + (255,), width=SS)
     im = Image.alpha_composite(im, lay)
-    font = ImageFont.truetype(str(PORT / "fonts" / "BarlowSemiCondensed-Bold.ttf"), 34 * SS)
-    small = ImageFont.truetype(str(PORT / "fonts" / "BarlowSemiCondensed-Bold.ttf"), 22 * SS)
     d = ImageDraw.Draw(im)
-    d.text((w / 2, h / 2 - 22 * SS), "YOUR WAVETABLE", font=font, fill=(0xE8, 0xEC, 0xEF), anchor="mm")
-    d.text((w / 2, h / 2 + 22 * SS), "USER BANK OR TABLE FILE", font=small, fill=(0x8C, 0x96, 0xA1), anchor="mm")
     d.rectangle([0, 0, w - 1, h - 1], outline=LINE, width=SS)
     return im.resize((W, H), Image.LANCZOS).convert("RGB")
 
@@ -126,6 +138,8 @@ def main(gen):
             q.save(ART / f"wt{wave}_{b}.png", optimize=True)
     user_view().quantize(colors=COLOURS, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(
         ART / "wt_user.png", optimize=True)
+    for letter, col in (("a", ACC), ("b", ACC2)):           # a user table's columns, per oscillator colour
+        column_strip(col).save(ART / f"wtcol_{letter}.png", optimize=True)
     for letter, col in (("A", ACC), ("B", ACC2)):           # the editor's badges beside OSC A / OSC B
         badge(letter, col).save(ART / f"badge_{letter.lower()}.png", optimize=True)
 

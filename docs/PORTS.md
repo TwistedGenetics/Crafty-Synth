@@ -85,16 +85,16 @@ A project saved on one MPC opens on any other.
 | ARP | arp, tempo, rate |
 
 **The look** (0.14) is the editor's and the plugin window's: the SERUM colours, rounded panels, each control in its
-own cell, the same knobs. The 3D view shows the bank playing (a user bank or a table file shows YOUR WAVETABLE: its
-waves are only known on the MPC) and follows WT POS in 16 steps; touching it moves WT POS.
+own cell, the same knobs. The 3D view shows the factory bank playing and follows WT POS in 16 steps; touching it moves
+WT POS. A file from `data/Wavetables` or a user bank (0.19) shows its own wave at WT POS, drawn by the engine as 56
+columns (the skin can't hold its picture: it's only known on the MPC).
 
 - **Presets**: BANK (1-8 factory, U1-U16 user) and SLOT step one at a time; PRESET runs through all 192, and MPC's
   own PRESET menu lists them by name. **Saving** (0.18): pick a user slot with **SAVE TO** (it shows what's in it) and
   press **SAVE**: the patch goes into that slot and into `data/Crafty Synth.user`.
 - **Polyphony** (0.18): **VOICES** on the OSC page: MONO, 2, 4, 6 or 8 (the default). The effects run once over all the
   voices; the arp-seq, and MONO, play one voice with glide and legato as before.
-- **Q-Links**: each Q-Link column is a row of up to four controls in one panel, so MPC's outline stays a small box. MPC
-  draws that outline over everything, open lists included: it can't be hidden while a list is open.
+- **Q-Links**: each Q-Link column is a row of up to four controls in one panel; MPC draws no outline (0.19).
 - **Values read as on the FM-1** (cutoff in Hz, delay in divisions, LADDER, HALL...). Lists (banks, modifiers,
   filter types, reverb modes, matrix destinations) open as pop-ups.
 - **Your user presets**: copy `Crafty Synth.user` from your Mac (path above) into the plugin's `data`
