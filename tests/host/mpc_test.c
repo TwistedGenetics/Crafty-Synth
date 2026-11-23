@@ -175,6 +175,40 @@ int main(int argc, char **argv)
         }
         CHECK(pk > 1000 && pk < 32767, "peak %d", pk);
     }
+    /* 0.18: polyphony: a chord on 8 voices is fuller than on MONO (one note); SAVE writes a user slot */
+    {
+        double r[2];
+        int mode;
+        for (mode = 0; mode < 2; mode++) {
+            void *q = e->create(dir);
+            uint8_t c[3] = {0x90, 48, 110};
+            int b, k;
+            e->set_param(q, "voices", mode ? "4" : "0");
+            for (k = 0; k < 3; k++) {
+                c[1] = (uint8_t)(48 + 4 * k);
+                e->midi(q, c, 3);
+            }
+            r[mode] = 0.0;
+            for (b = 0; b < 300; b++) {
+                e->render(q, out, 128);
+                if (b >= 100)
+                    for (k = 0; k < 256; k++)
+                        r[mode] += (double)out[k] * out[k];
+            }
+            e->destroy(q);
+        }
+        printf("mpc: a 3-note chord, MONO %.0f, 8 voices %.0f (energy)\n", r[0] / 1e9, r[1] / 1e9);
+        CHECK(r[1] > r[0] * 1.6, "the chord isn't polyphonic (%.0f vs %.0f)", r[1], r[0]);
+        e->set_param(m2, "sslot", "1");
+        CHECK(!strcmp(get(e, m2, "sslot_display"), "U1-2 EMPTY"), "sslot: %s", get(e, m2, "sslot_display"));
+        e->set_param(m2, "ssave", "1");
+        CHECK(!strcmp(get(e, m2, "preset_display"), "U1-2 INIT"), "saved: %s", get(e, m2, "preset_display"));
+        {
+            void *q = e->create(dir);            /* a new instance reads the file */
+            CHECK(!strcmp(get(e, q, "preset:65"), "U1-2 INIT"), "U1-2 from the file: %s", get(e, q, "preset:65"));
+            e->destroy(q);
+        }
+    }
     e->destroy(m);
     e->destroy(m2);
     remove(path);

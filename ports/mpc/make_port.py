@@ -130,11 +130,13 @@ def locked_order(params):
 # art/wt_user.png), then two rows of controls in the editor's cells
 OSC_SECTIONS = ("OSC A", "OSC B")
 VIEW_W, VIEW_H = 560, 180
+# per oscillator: its controls in two rows of up to four (None: an empty place), and its Q-Link columns: the
+# WAVETABLE box with the first row, then the second row (each column a neat box around what it turns)
 OSC = (
-    ("A", 1, [("knob", "w1pos", "WT POS"), ("knob", "omamt", "OSC MOD"), ("popup", "ommode", "MOD MODE"),
+    ("A", 1, [("knob", "w1pos", "WT POS"), ("knob", "omamt", "OSC MOD"), ("popup", "ommode", "MOD MODE"), None,
               ("knob", "mix", "MIX"), ("knob", "spread", "SPREAD"), ("knob", "glide", "GLIDE"), ("knob", "oct", "OCTAVE")], 8),
-    ("B", 2, [("knob", "w2pos", "WT POS"), ("knob", "tune", "TUNE"), ("knob", "fine", "FINE"),
-              ("knob", "bamt", "B MOD"), ("popup", "bmode", "B MODE")], 9),
+    ("B", 2, [("knob", "w2pos", "WT POS"), ("knob", "bamt", "B MOD"), ("popup", "bmode", "B MODE"), None,
+              ("knob", "tune", "TUNE"), ("knob", "fine", "FINE"), ("popup", "voices", "VOICES"), None], 9),
 )
 LIST_ROWS, ROW_H = 8, 68
 
@@ -161,6 +163,41 @@ def short_tabs(layout):
     if long:
         sys.exit(f"make_port: tab names too long for the MPC's tab bar: {long}: add them to TAB_NAMES")
     return layout
+
+
+def neat_qlinks(layout):
+    """every page's Q-Link columns (4 at a time) as neat boxes: a row of controls inside one panel, in fours, the
+    rest of a column left empty, so MPC's outline of the column in use doesn't spread over the page"""
+    out = []
+    for tab in re.split(r"(?m)^(?=\[tab )", layout):
+        if not tab.startswith("[tab ") or tab.startswith("[tab OSC]"):
+            out.append(tab)
+            continue
+        lines = tab.rstrip("\n").split("\n")
+        frames, ctrls = [], []
+        for ln in lines:
+            f = re.match(r"frame x=(\d+) y=(\d+) w=(\d+) h=(\d+)", ln)
+            if f:
+                frames.append(tuple(map(int, f.groups())))
+            m = re.match(r"\s*(knob|popup|toggle|button|stepper|readout) cx=(\d+) cy=(\d+).* key=(\S+)", ln)
+            if m:
+                cx, cy = int(m[2]), int(m[3]) - (20 if m[1] == "popup" else 0)
+                fr = next((i for i, (x, y, w, h) in enumerate(frames) if x <= cx < x + w and y <= cy < y + h), -1)
+                ctrls.append((fr, cy // 40, cx, m[4]))
+        groups = {}
+        for fr, row, cx, key in ctrls:
+            groups.setdefault((fr, row), []).append((cx, key))
+        chunks = []
+        for g in sorted(groups, key=lambda g: (g[1], min(c[0] for c in groups[g]))):   # top to bottom, left to right
+            ks = [k for _, k in sorted(groups[g])]
+            chunks += [ks[i:i + 4] for i in range(0, len(ks), 4)]
+        if len(chunks) <= 4:
+            keys = [k for c in chunks for k in (c + ["-"] * 4)[:4]]
+            while keys and keys[-1] == "-":
+                keys.pop()
+            lines = [ln if not ln.startswith("qlinks ") else re.sub(r"= .*", "= " + ",".join(keys), ln) for ln in lines]
+        out.append("\n".join(lines) + "\n\n")
+    return "".join(out)
 
 
 def with_cells(layout):
@@ -212,14 +249,18 @@ def osc_tab():
         for b in range(banks):
             out.append(f'meter cx={vx + VIEW_W // 2} cy={vy + VIEW_H // 2} w={VIEW_W} h={VIEW_H} key=w{wave}pos '
                        f'strip=art/wt{wave}_{b}.png frames=17 when=w{wave}shown:{b + 1}')
-        for i, (kind, key, label) in enumerate(ctrls):
+        cols = [[f"w{wave}wt"], []]
+        for i, c in enumerate(ctrls):
+            if c is None:
+                continue
+            kind, key, label = c
             cx, cy = x + 88 + 150 * (i % 4), y + 318 + 160 * (i // 4)
+            cols[i // 4].append(key)
             if kind == "knob":
                 out.append(f'knob cx={cx} cy={cy} r=36 label="{label}" key={key} ns=17 vs=19 when=w{wave}list:0')
             else:
                 out.append(f'popup cx={cx} cy={cy + 20} w=134 h=48 label="{label}" key={key} tsize=18 when=w{wave}list:0')
-            keys.append(key)
-        keys.append(f"w{wave}wt")
+        keys += [k for col in cols for k in (col + ["-"] * 4)[:4]]
         out.append(f'list x={x + 18} y={y + 58} w={w - 36} h={LIST_ROWS * ROW_H} key=w{wave}row cols=1 rows={LIST_ROWS} '
                    f'th={ROW_H} gap=0 tsize=26 talign=left when=w{wave}list:1')
     out.append(f'qlinks "OSC" = {",".join(keys)}')
@@ -249,7 +290,7 @@ def main():
         auto_tabs = re.split(r"(?m)^(?=\[tab )", auto.read_text())
         # the auto-layout's MORE page holds what no section names: the OSC page's controls and the hidden views
         auto_text = "".join(t for t in auto_tabs if not t.startswith("[tab MORE"))
-        body, cells = with_cells(short_tabs(osc + bigger(auto_text, names)))
+        body, cells = with_cells(neat_qlinks(short_tabs(osc + bigger(auto_text, names))))
         layout = THEME + body
     stale = []
     if "--views" in sys.argv:                           # the 3D wavetable views' filmstrips (committed PNGs)

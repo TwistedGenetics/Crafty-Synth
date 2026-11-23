@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.18 beta (2026-11-23)
+
+MPC only (the FM-1, editor and AU / VST3 play and look as before):
+- **Polyphony**: up to 8 voices (VOICES on the OSC page: MONO, 2, 4, 6, 8; 8 by default). Each voice is the whole
+  synth up to the amp; the effects (crusher, phaser, delay, chorus, reverb, OTT) run once on the sum. The sustain
+  pedal holds every voice. With the arp-seq on, or MONO, it plays one voice as before (glide and legato).
+- **Saving to the user slots**: SAVE TO (U1-1 .. U16-8, shown with what's in it) and SAVE on the PRESET page write the
+  patch you're playing into that slot and into `data/Crafty Synth.user`, so it's there next time (and in BANK / SLOT /
+  PRESET, and MPC's preset list).
+- **Q-Links in neat fours**: every page's Q-Link columns are now a row of up to four controls inside one panel (the
+  rest left empty), so MPC's outline of the column in use is a small box, not most of the page.
+- Engine: `voice_only` and `cr_synth_fx()` (a synth's effects on a sum of voices), off unless a host asks for them.
+
 ## 0.17 beta (2026-11-23)
 
 - **MPC: one wavetable list per oscillator.** The box at the top of OSC A and OSC B lists the factory banks first, then

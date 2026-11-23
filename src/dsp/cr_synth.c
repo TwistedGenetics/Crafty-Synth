@@ -485,6 +485,7 @@ static inline float wrap1(float p)
 static inline float hann(float p) { return 0.5f - 0.5f * cr_sin_turn(p + 0.25f < 1.f ? p + 0.25f : p - 0.75f); }
 static inline float ror(float p, float m) { return p < m ? 0.5f * p / m : 0.5f + 0.5f * (p - m) / (1.f - m); }
 
+static void fx_tail(cr_synth_t *s, float y, float *out);
 void cr_synth_render(cr_synth_t *s, float *lr, uint32_t n)
 {
     const float sc = cr_wt_scale();
@@ -684,43 +685,70 @@ void cr_synth_render(cr_synth_t *s, float *lr, uint32_t n)
                 float d = cr_tanh(y * s->dist_g) * (1.f - 0.25f * s->dist_mix);
                 y += (d - y) * s->dist_mix;
             }
-            y = cr_fx_era(&s->fx, y);          /* EraCrush: the sampler's converter */
+            if (!s->voice_only)
+                y = cr_fx_era(&s->fx, y);      /* EraCrush: the sampler's converter */
             y *= amp0 + damp * (float)k;
-            y = cr_fx_phaser(&s->fx, y);
-            /* the delay (mono, its time glides: moving it bends the echoes like tape) */
-            {
-                float rp, f, wet, a0, a1;
-                uint32_t r0;
-                s->dl_pos += (s->dl_target - s->dl_pos) * 0.0004f;
-                rp = (float)s->dl_w - s->dl_pos;
-                if (rp < 0.f)
-                    rp += (float)CR_DLY_LEN;
-                r0 = (uint32_t)rp;
-                f = rp - (float)r0;
-                a0 = (float)s->dl[r0 & (CR_DLY_LEN - 1u)];
-                a1 = (float)s->dl[(r0 + 1u) & (CR_DLY_LEN - 1u)];
-                wet = (a0 + (a1 - a0) * f) * (1.f / 16384.f);
-                s->dl_lp += 0.55f * (wet - s->dl_lp);
-                s->dl_hp += 0.002f * (s->dl_lp - s->dl_hp);
-                {
-                    float wv = (y + (s->dl_lp - s->dl_hp) * s->dl_fb) * 16384.f;
-                    wv = wv > 32767.f ? 32767.f : wv < -32767.f ? -32767.f : wv;
-                    s->dl[s->dl_w] = (int16_t)wv;
-                }
-                s->dl_w = (s->dl_w + 1u) & (CR_DLY_LEN - 1u);
-                y += (wet - y) * s->dl_mix;
+            if (s->voice_only) {               /* a voice of a polyphonic host: the effects come after the sum */
+                lr[2u * (done + k)] = lr[2u * (done + k) + 1u] = y;
+                continue;
             }
-            /* from here stereo: the chorus, the reverb, OTT */
-            {
-                float L, R;
-                cr_fx_chorus(&s->fx, y, &L, &R);
-                cr_fx_reverb(&s->fx, &L, &R);
-                cr_fx_ott(&s->fx, &L, &R);
-                lr[2u * (done + k)] = cr_soft(L * 0.8f);
-                lr[2u * (done + k) + 1u] = cr_soft(R * 0.8f);
-            }
+            fx_tail(s, y, lr + 2u * (done + k));
         }
         s->amp_prev = s->amp;
+        done += len;
+    }
+}
+
+/* the effects after the voice (phaser, delay, chorus, reverb, OTT, the soft clip): out[0] L, out[1] R */
+static void fx_tail(cr_synth_t *s, float y, float *out)
+{
+    y = cr_fx_phaser(&s->fx, y);
+    /* the delay (mono, its time glides: moving it bends the echoes like tape) */
+    {
+        float rp, f, wet, a0, a1;
+        uint32_t r0;
+        s->dl_pos += (s->dl_target - s->dl_pos) * 0.0004f;
+        rp = (float)s->dl_w - s->dl_pos;
+        if (rp < 0.f)
+            rp += (float)CR_DLY_LEN;
+        r0 = (uint32_t)rp;
+        f = rp - (float)r0;
+        a0 = (float)s->dl[r0 & (CR_DLY_LEN - 1u)];
+        a1 = (float)s->dl[(r0 + 1u) & (CR_DLY_LEN - 1u)];
+        wet = (a0 + (a1 - a0) * f) * (1.f / 16384.f);
+        s->dl_lp += 0.55f * (wet - s->dl_lp);
+        s->dl_hp += 0.002f * (s->dl_lp - s->dl_hp);
+        {
+            float wv = (y + (s->dl_lp - s->dl_hp) * s->dl_fb) * 16384.f;
+            wv = wv > 32767.f ? 32767.f : wv < -32767.f ? -32767.f : wv;
+            s->dl[s->dl_w] = (int16_t)wv;
+        }
+        s->dl_w = (s->dl_w + 1u) & (CR_DLY_LEN - 1u);
+        y += (wet - y) * s->dl_mix;
+    }
+    /* from here stereo: the chorus, the reverb, OTT */
+    {
+        float L, R;
+        cr_fx_chorus(&s->fx, y, &L, &R);
+        cr_fx_reverb(&s->fx, &L, &R);
+        cr_fx_ott(&s->fx, &L, &R);
+        out[0] = cr_soft(L * 0.8f);
+        out[1] = cr_soft(R * 0.8f);
+    }
+}
+
+/* a polyphonic host's effects: its voices (voice_only) summed in lr (L = R), through this synth's effects as the
+ * patch and its own modulation set them (its control blocks run; it plays no note) */
+void cr_synth_fx(cr_synth_t *s, float *lr, uint32_t n)
+{
+    uint32_t done = 0, k;
+    while (done < n) {
+        uint32_t len = n - done < CR_CTRL ? n - done : CR_CTRL;
+        control(s);
+        for (k = 0; k < len; k++) {
+            float *o = lr + 2u * (done + k);
+            fx_tail(s, cr_fx_era(&s->fx, o[0]), o);
+        }
         done += len;
     }
 }

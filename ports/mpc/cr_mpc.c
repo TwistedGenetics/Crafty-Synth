@@ -27,6 +27,7 @@ static mpc_list_t LISTS[CR_NP];
 static char KEYS[CR_NP][16];
 static int ready;
 
+#define POLY_MAX 8
 typedef struct {
     cr_inst_t in;
     uint8_t user[CR_USER_BYTES];
@@ -39,6 +40,22 @@ typedef struct {
     uint32_t rdepth;                            /* RANDOM's depth, 0..127 (0.16) */
     int list[2], top[2];                        /* 0.17: the wavetable list open, its first row's item */
     int wt[2];                                  /* w1wt / w2wt as last reported (-1: not yet) */
+    /* 0.18: polyphony. Voice 0 is the instance's own synth; with the arp off and VOICES above MONO the notes are
+     * spread over the voices (each the whole synth but its effects, voice_only), summed, then the effects once
+     * (fxs). With the arp on, or MONO, the instance plays as before. */
+    int nvoice;                                 /* VOICES: 1 (MONO), 2, 4, 6, 8 */
+    int poly;                                   /* the poly path in use */
+    cr_synth_t vox[POLY_MAX - 1];               /* voices 1.. (voice 0: in.syn) */
+    int16_t *vmem;                              /* their memory (their filters' combs) */
+    cr_synth_t fxs;                             /* the effects after the sum */
+    int16_t fxmem[CR_SYN_MEM];
+    cr_patch_t vpat;                            /* the patch the voices have */
+    uint8_t vnote[POLY_MAX];                    /* each voice's note (0xFF: none) */
+    uint32_t vage[POLY_MAX], vclock;            /* when each started (the oldest is taken first) */
+    int sus;
+    uint32_t sus_bits[4];
+    float vbuf[2 * CR_INST_FRAMES];
+    uint32_t sslot;                             /* SAVE TO: a user slot, 64..191 */
     int tpos[2];                                /* table1 / table2 as last reported (-1: not yet) */
     int shown[2];                               /* the 3D views' bank as last reported (w1shown, w2shown; -1: not yet) */
     uint32_t seed;
@@ -223,6 +240,116 @@ static void wt_set(mpc_t *m, int k, int i)      /* the oscillator plays its list
     wt_follow(m, k);
 }
 
+/* ---- 0.18: polyphony ---- */
+static void all_off(mpc_t *m);
+static const int VOICES[5] = {1, 2, 4, 6, 8};
+static cr_synth_t *voice(mpc_t *m, int v) { return v ? &m->vox[v - 1] : &m->in.syn; }
+static int poly_on(const mpc_t *m) { return m->nvoice > 1 && m->in.p.p[CR_ARP] < 64u; }
+static void poly_mode(mpc_t *m, int on)         /* switch the path: every note off, the voices set for it */
+{
+    int v;
+    if (on == m->poly)
+        return;
+    all_off(m);
+    for (v = 0; v < POLY_MAX; v++) {
+        cr_synth_all_off(voice(m, v));
+        voice(m, v)->voice_only = (uint8_t)on;
+        m->vnote[v] = 0xFF;
+    }
+    m->sus = 0;
+    memset(m->sus_bits, 0, sizeof m->sus_bits);
+    m->poly = on;
+}
+static void poly_note(mpc_t *m, uint32_t n, uint32_t vel)
+{
+    int v, best = -1;
+    n &= 0x7Fu;
+    if (!vel) {
+        if (m->sus) {
+            m->sus_bits[n >> 5] |= 1u << (n & 31u);
+            return;
+        }
+        for (v = 0; v < m->nvoice; v++)
+            if (m->vnote[v] == n) {
+                cr_synth_off(voice(m, v), n);
+                m->vnote[v] = 0xFF;
+            }
+        return;
+    }
+    m->sus_bits[n >> 5] &= ~(1u << (n & 31u));
+    for (v = 0; v < m->nvoice; v++)              /* the same note again: its voice */
+        if (m->vnote[v] == n)
+            best = v;
+    for (v = 0; best < 0 && v < m->nvoice; v++)   /* a silent voice */
+        if (m->vnote[v] == 0xFF && !voice(m, v)->env[1].st)
+            best = v;
+    for (v = 0; best < 0 && v < m->nvoice; v++)   /* else the oldest released one, else the oldest */
+        if (m->vnote[v] == 0xFF && (best < 0 || m->vage[v] < m->vage[best]))
+            best = v;
+    for (v = 0; v < m->nvoice; v++)
+        if (best < 0 || (m->vnote[best] != 0xFF && m->vage[v] < m->vage[best]))
+            best = v;
+    if (m->vnote[best] != 0xFF && m->vnote[best] != n)
+        cr_synth_all_off(voice(m, best));         /* stolen: a new note, no glide from the old one */
+    voice(m, best)->nheld = 0;
+    cr_synth_on(voice(m, best), n, vel);
+    m->vnote[best] = (uint8_t)n;
+    m->vage[best] = ++m->vclock;
+}
+static void all_off(mpc_t *m)
+{
+    int v;
+    cr_inst_all_off(&m->in);
+    for (v = 1; v < POLY_MAX; v++)
+        cr_synth_all_off(voice(m, v));
+    memset(m->vnote, 0xFF, sizeof m->vnote);
+    m->sus = 0;
+    memset(m->sus_bits, 0, sizeof m->sus_bits);
+}
+/* the voices follow the instance: its patch, banks, controllers, bend and tempo */
+static void poly_sync(mpc_t *m)
+{
+    int v, ch = memcmp(&m->vpat, &m->in.p, sizeof m->vpat) != 0;
+    if (ch)
+        m->vpat = m->in.p;
+    for (v = 1; v < m->nvoice; v++) {
+        cr_synth_t *s = voice(m, v), *o = &m->in.syn;
+        if (ch)
+            cr_synth_patch(s, &m->in.p);
+        cr_synth_tables(s, o->t1, o->t2, (int)o->noise2);
+        s->modw = o->modw;
+        s->expr = o->expr;
+        s->aftt = o->aftt;
+        s->bend = o->bend;
+        s->tempo = o->tempo;
+    }
+    if (ch)
+        cr_synth_patch(&m->fxs, &m->in.p);
+    m->fxs.modw = m->in.syn.modw;
+    m->fxs.expr = m->in.syn.expr;
+    m->fxs.aftt = m->in.syn.aftt;
+    m->fxs.tempo = m->in.syn.tempo;
+}
+
+/* SAVE: the working patch into user slot m->sslot, and the user file written back */
+static char UFILE[1100];
+static void save_slot(mpc_t *m)
+{
+    uint32_t slot = m->sslot < CR_NFACTORY ? CR_NFACTORY : m->sslot % CR_NPRESET;
+    FILE *f;
+    cr_patch_t p = m->in.p;
+    p.magic = CR_PATCH_MAGIC;
+    p.ver = CR_PATCH_VER;
+    memcpy(m->user + CR_FL_PRESETS + (slot - CR_NFACTORY) * CR_PATCH_BYTES, &p, CR_PATCH_BYTES);
+    if (UFILE[0] && (f = fopen(UFILE, "wb")) != 0) {
+        fwrite(m->user, 1, CR_USER_BYTES, f);
+        fclose(f);
+    }
+    m->in.cur = (uint16_t)slot;
+    m->in.dirty = 0;
+    m->report = 3 + CR_NP + 2;                  /* the preset's place and name moved */
+}
+
 static int saved_slot(void *ctx, uint32_t slot) { return cr_user_saved(((mpc_t *)ctx)->user, slot); }
 static void random_patch(mpc_t *m)
 {
@@ -232,7 +359,7 @@ static void random_patch(mpc_t *m)
         m->seed = (uint32_t)time(0) * 2654435761u + (uint32_t)(uintptr_t)m;
     (void)cr_preset_get(m->user, cr_rand_slot(&m->seed, saved_slot, m), &t);
     cr_patch_random(&t, &m->in.p, &m->seed, m->rkeep ? CR_RAND_KEEP_TABLES : 0u, m->rdepth, 0u);
-    cr_inst_all_off(&m->in);
+    all_off(m);
     cr_inst_use(&m->in, &t);
     m->in.dirty = 1;
     if (!m->rkeep)                              /* as the Tracker: half the time one of your files, else the bank */
@@ -271,12 +398,14 @@ static void *create(const char *dir)
     mpc_t *m = calloc(1, sizeof *m);
     char path[1024];
     FILE *f;
+    int k;
     if (!m)
         return 0;
     tables();
     memset(m->user, 0xFF, sizeof m->user);
     if (dir) {
         snprintf(path, sizeof path, "%s/Crafty Synth.user", dir);
+        snprintf(UFILE, sizeof UFILE, "%s", path);
         if ((f = fopen(path, "rb")) != 0) {
             if (fread(m->user, 1, sizeof m->user, f) != sizeof m->user)
                 memset(m->user, 0xFF, sizeof m->user);
@@ -291,14 +420,55 @@ static void *create(const char *dir)
     m->tpos[0] = m->tpos[1] = -1;
     m->rdepth = 32u;
     m->wt[0] = m->wt[1] = -1;
+    m->nvoice = 8;                              /* 0.18: polyphonic unless VOICES is MONO (or the arp is on) */
+    m->sslot = CR_NFACTORY;
+    memset(m->vnote, 0xFF, sizeof m->vnote);
+    m->vmem = calloc((size_t)(POLY_MAX - 1) * CR_SYN_MEM, sizeof *m->vmem);
+    for (k = 0; m->vmem && k < POLY_MAX - 1; k++) {
+        cr_synth_init(&m->vox[k], m->vmem + (size_t)k * CR_SYN_MEM);
+        m->vox[k].voice_only = 1;
+    }
+    if (!m->vmem)
+        m->nvoice = 1;
+    cr_synth_init(&m->fxs, m->fxmem);
+    m->vpat.magic = 0;
     return m;
 }
-static void destroy(void *p) { free(p); }
+static void destroy(void *p)
+{
+    if (p)
+        free(((mpc_t *)p)->vmem);
+    free(p);
+}
 
 static void midi(void *p, const uint8_t *msg, int len)
 {
-    if (len > 0 && msg[0] != 0xF0)
-        cr_inst_midi(&((mpc_t *)p)->in, msg, (uint32_t)len);
+    mpc_t *m = p;
+    uint32_t t;
+    if (len <= 0 || msg[0] == 0xF0)
+        return;
+    t = msg[0] & 0xF0u;
+    if (poly_on(m)) {                           /* polyphonic: the notes and the sustain pedal are the voices' */
+        poly_mode(m, 1);
+        if (len >= 3 && (t == 0x90u || t == 0x80u)) {
+            uint32_t v = t == 0x90u ? msg[2] & 0x7Fu : 0u;
+            poly_note(m, msg[1], v ? (m->in.g.velo ? v : 100u) : 0u);
+            return;
+        }
+        if (len >= 3 && t == 0xB0u && msg[1] == 64u) {
+            m->sus = msg[2] >= 64u;
+            if (!m->sus) {
+                uint32_t n;
+                for (n = 0; n < 128u; n++)
+                    if (m->sus_bits[n >> 5] & (1u << (n & 31u)))
+                        poly_note(m, n, 0);
+                memset(m->sus_bits, 0, sizeof m->sus_bits);
+            }
+            return;
+        }
+    } else
+        poly_mode(m, 0);
+    cr_inst_midi(&m->in, msg, (uint32_t)len);
 }
 
 /* the state: "CRS1" then the preset (4 hex), dirty (2), the patch (256 hex); 0.13: "|" and each wave's wavetable
@@ -339,7 +509,7 @@ static void state_set(mpc_t *m, const char *s)
     }
     if (cr_patch_check(&pt))
         return;
-    cr_inst_all_off(&m->in);
+    all_off(m);
     cr_inst_use(&m->in, &pt);
     m->in.cur = (uint16_t)(cur % CR_NPRESET);
     m->in.dirty = (uint8_t)(dirty != 0);
@@ -380,7 +550,7 @@ static void set_param(void *p, const char *key, const char *val)
         else
             s = v < 1 ? 0 : v > 8 ? 7 : v - 1;
         if (b * 8 + s != m->in.cur) {
-            cr_inst_all_off(&m->in);
+            all_off(m);
             cr_inst_load(&m->in, (uint32_t)(b * 8 + s));   /* reported by mpc_engine_changed */
         }
         return;
@@ -429,6 +599,26 @@ static void set_param(void *p, const char *key, const char *val)
         m->rkeep = atoi(val) == 1;
         return;
     }
+    if (!strcmp(key, "voices")) {               /* 0.18: MONO, 2, 4, 6, 8 */
+        int i = atoi(val), nv = VOICES[i < 0 ? 0 : i > 4 ? 4 : i];
+        if (!m->vmem)
+            nv = 1;
+        if (nv != m->nvoice) {
+            all_off(m);
+            m->nvoice = nv;
+        }
+        return;
+    }
+    if (!strcmp(key, "sslot")) {                /* SAVE TO: U1-1 .. U16-8 */
+        int v = (int)(atof(val) + 0.5);
+        m->sslot = CR_NFACTORY + (uint32_t)(v < 0 ? 0 : v > (int)CR_NUSER - 1 ? (int)CR_NUSER - 1 : v);
+        return;
+    }
+    if (!strcmp(key, "ssave")) {                /* a trigger */
+        if (atof(val) > 0.5)
+            save_slot(m);
+        return;
+    }
     if (!strcmp(key, "rdepth")) {
         int v = (int)(atof(val) + 0.5);
         m->rdepth = (uint32_t)(v < 0 ? 0 : v > 127 ? 127 : v);
@@ -437,7 +627,7 @@ static void set_param(void *p, const char *key, const char *val)
     if (!strcmp(key, "preset")) {
         int n = (int)(atof(val) + 0.5);
         if (n >= 0 && n < (int)CR_NPRESET && n != m->in.cur) {
-            cr_inst_all_off(&m->in);
+            all_off(m);
             cr_inst_load(&m->in, (uint32_t)n);  /* reported by mpc_engine_changed */
         }
         return;
@@ -505,6 +695,24 @@ static int get_param(void *p, const char *key, char *buf, int n)
         return snprintf(buf, (size_t)n, "%d", shown_of(m, key[1] - '1'));
     if (!strcmp(key, "rkeep"))
         return snprintf(buf, (size_t)n, "%d", m->rkeep);
+    if (!strcmp(key, "voices")) {
+        int i;
+        for (i = 0; i < 4 && VOICES[i] < m->nvoice; i++)
+            ;
+        return snprintf(buf, (size_t)n, "%d", i);
+    }
+    if (!strcmp(key, "ssave"))
+        return snprintf(buf, (size_t)n, "0");
+    if (!strcmp(key, "sslot"))
+        return snprintf(buf, (size_t)n, "%u", (unsigned)(m->sslot - CR_NFACTORY));
+    if (!strcmp(key, "sslot_display")) {        /* "U1-1 MY SAW", "U1-2 (EMPTY)" */
+        char lab[8];
+        cr_patch_t pt;
+        cr_preset_label(m->sslot, lab);
+        if (cr_preset_get(m->user, m->sslot, &pt))
+            return snprintf(buf, (size_t)n, "%s %s", lab, pt.name);
+        return snprintf(buf, (size_t)n, "%s EMPTY", lab);
+    }
     if (!strcmp(key, "rdepth"))
         return snprintf(buf, (size_t)n, "%u", (unsigned)m->rdepth);
     if (!strcmp(key, "rdepth_display"))
@@ -554,7 +762,20 @@ static void render(void *p, int16_t *out, int frames)
     int i;
     if (frames > (int)CR_INST_FRAMES)
         frames = (int)CR_INST_FRAMES;
-    cr_inst_render(&m->in, m->buf, (uint32_t)frames);
+    poly_mode(m, poly_on(m));
+    cr_inst_render(&m->in, m->buf, (uint32_t)frames);   /* (polyphonic: voice 0, dry) */
+    if (m->poly) {
+        int v;
+        poly_sync(m);
+        for (v = 1; v < m->nvoice; v++) {
+            if (m->vnote[v] == 0xFF && !voice(m, v)->env[1].st)
+                continue;                       /* silent: nothing to add */
+            cr_synth_render(voice(m, v), m->vbuf, (uint32_t)frames);
+            for (i = 0; i < 2 * frames; i++)
+                m->buf[i] += m->vbuf[i];
+        }
+        cr_synth_fx(&m->fxs, m->buf, (uint32_t)frames);
+    }
     for (i = 0; i < 2 * frames; i++) {
         float x = m->buf[i] * 32767.f;
         out[i] = (int16_t)(x > 32767.f ? 32767 : x < -32768.f ? -32768 : (int)x);

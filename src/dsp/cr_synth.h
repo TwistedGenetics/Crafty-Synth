@@ -50,6 +50,7 @@ typedef struct {
     float lph[2], lval[2], lsh[2], lstop[2];
     uint32_t rng;
     float tempo;
+    uint8_t voice_only;                /* 0.18: a poly host's voice: render() gives the dry voice, L = R (cr_synth_fx) */
     /* the audio path */
     cr_filt_t filt;
     cr_fx_t fx;
@@ -77,6 +78,7 @@ void cr_synth_off(cr_synth_t *s, uint32_t note);
 void cr_synth_all_off(cr_synth_t *s);
 void cr_synth_ctl(cr_synth_t *s, uint32_t src, float v);       /* CR_S_MODW / EXPR / AFTT: 0..1 */
 void cr_synth_bend(cr_synth_t *s, float semis);
+void cr_synth_fx(cr_synth_t *s, float *lr, uint32_t n);   /* the effects on voices summed in lr (L = R) */
 /* writes n stereo frames (L R; the CRAFTsynth is mono: both the same), -1..1 */
 void cr_synth_render(cr_synth_t *s, float *lr, uint32_t n);
 int cr_synth_sounding(const cr_synth_t *s);

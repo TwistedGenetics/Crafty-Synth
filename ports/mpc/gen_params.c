@@ -37,7 +37,7 @@ static const char *const SECTIONS[][9] = {
     {"DELAY", "DMIX", "DTIME", "DFB", "DSYNC", 0},
     {"MOD FX", "CHMIX", "CHRATE", "PHMIX", "PHRATE", 0},
     {"CRUSH", "ERA", "CRUSH", "OTT", 0},
-    {"PRESET", "@pbank", "@pslot", "@preset", "@random", "@rkeep", "@rdepth", 0},
+    {"PRESET", "@pbank", "@pslot", "@preset", "@random", "@rkeep", "@rdepth", "@sslot", "@ssave"},
     {"ARP-SEQ", "ARP", "TEMPO", "ARPRATE", 0},
 };
 
@@ -134,6 +134,12 @@ int main(void)
             printf(",\n  {\"key\": \"w%urow_%u\", \"name\": \"TABLE %u ROW %u\", \"min\": 0, \"max\": 1, \"default\": 0, "
                    "\"display\": \"string\"}", k, i, k, i);
     }
+    /* 0.18: polyphony (the arp-seq stays one voice), and saving to a user slot */
+    printf(",\n  {\"key\": \"voices\", \"name\": \"VOICES\", \"options\": [\"MONO\", \"2\", \"4\", \"6\", \"8\"], \"default\": 4}");
+    printf(",\n  {\"key\": \"sslot\", \"name\": \"SAVE TO\", \"min\": 0, \"max\": %u, \"default\": 0, \"display\": \"int\", "
+           "\"dynamic_display\": true, \"refresh_display\": true, \"nudge_pct\": 2}", CR_NUSER - 1u);
+    printf(",\n  {\"key\": \"ssave\", \"name\": \"SAVE\", \"min\": 0, \"max\": 1, \"default\": 0, \"type\": \"trigger\", "
+           "\"momentary\": true}");
     printf("\n ],\n \"sections\": [\n");
     for (s = 0; s < sizeof SECTIONS / sizeof SECTIONS[0]; s++) {
         printf("%s  {\"label\": ", s ? ",\n" : "");

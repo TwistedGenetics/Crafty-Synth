@@ -116,7 +116,10 @@
   {"key": "w2row_5", "name": "TABLE 2 ROW 5", "min": 0, "max": 1, "default": 0, "display": "string"},
   {"key": "w2row_6", "name": "TABLE 2 ROW 6", "min": 0, "max": 1, "default": 0, "display": "string"},
   {"key": "w2row_7", "name": "TABLE 2 ROW 7", "min": 0, "max": 1, "default": 0, "display": "string"},
-  {"key": "w2row_8", "name": "TABLE 2 ROW 8", "min": 0, "max": 1, "default": 0, "display": "string"}
+  {"key": "w2row_8", "name": "TABLE 2 ROW 8", "min": 0, "max": 1, "default": 0, "display": "string"},
+  {"key": "voices", "name": "VOICES", "options": ["MONO", "2", "4", "6", "8"], "default": 4},
+  {"key": "sslot", "name": "SAVE TO", "min": 0, "max": 127, "default": 0, "display": "int", "dynamic_display": true, "refresh_display": true, "nudge_pct": 2},
+  {"key": "ssave", "name": "SAVE", "min": 0, "max": 1, "default": 0, "type": "trigger", "momentary": true}
  ],
  "sections": [
   {"label": "OSC A", "keys": ["w1pos", "w1bank", "omamt", "ommode", "mix", "spread", "glide", "oct"]},
@@ -134,7 +137,7 @@
   {"label": "DELAY", "keys": ["dmix", "dtime", "dfb", "dsync"]},
   {"label": "MOD FX", "keys": ["chmix", "chrate", "phmix", "phrate"]},
   {"label": "CRUSH", "keys": ["era", "crush", "ott"]},
-  {"label": "PRESET", "keys": ["pbank", "pslot", "preset", "random", "rkeep", "rdepth"]},
+  {"label": "PRESET", "keys": ["pbank", "pslot", "preset", "random", "rkeep", "rdepth", "sslot", "ssave"]},
   {"label": "ARP-SEQ", "keys": ["arp", "tempo", "arprate"]}
  ]
 }
