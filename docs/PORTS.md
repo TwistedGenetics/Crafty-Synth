@@ -19,16 +19,16 @@ and `Crafty Synth.vst3` to `~/Library/Audio/Plug-Ins/VST3`, clear the download q
 com.apple.quarantine ...`: the plugin isn't notarised), and rescan in your DAW. In Ableton Live it is under
 Plug-Ins → Twisted Genetics → Crafty Synth.
 
-**The window is the web editor**, in the same SERUM look, all of it in one window: two rows of panels (oscillators,
-voice, filter, envelopes, LFOs; matrix and every effect, arp-seq), the pattern, keyboard and wavetables below. It is
-always connected: the preset list,
+**The window is the web editor**, in the same SERUM look and layout: both oscillators with their wavetables, the
+filter, envelopes, LFOs, the matrix, every effect, the arp-seq pattern, the wavetables and the keyboard (scroll down for
+the lower panels). It is always connected: the preset list,
 **NAME**, **SAVE** (to a user slot), **RELOAD**, **EMPTY SLOT** and the wavetable importer (**STORE**) work on the
 plugin the way they work on an FM-1.
 
 - **Naming a preset:** type in **NAME** (12 characters, as the FM-1 shows them: capitals, digits, space, a little
   punctuation), pick a user slot, **SAVE** (or Enter in the name).
-- **Size:** drag the window's corner: the whole GUI scales with it and keeps its shape, as other synths do. The
-  project keeps the window's size.
+- **Size:** drag the window's corner: the whole GUI zooms with the window's width (Serum 2-style), from small up to
+  4x, without the panels moving. The project keeps the window's size.
 
 - **Every patch value is a host parameter** (79, named as on the FM-1's pages: "FILT EG ATTACK", "REVERB SIZE"...),
   showing its value the FM-1's way ("2.1KHZ", "1/8D", "LADDER"). Automate them, map them to a controller.

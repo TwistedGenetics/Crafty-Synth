@@ -72,7 +72,7 @@ public:
 
     void userAreaChanged();                         // another instance changed the shared user area
     // the window: its size and the layout's shape (width / height), kept in the project
-    int editorW = 1440, editorH = 910;
+    int editorW = 1240, editorH = 860;
     double layoutAspect = 1.6;
     static constexpr int numParams = CR_NP;
 

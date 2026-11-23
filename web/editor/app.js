@@ -781,36 +781,17 @@ try { const s = localStorage.getItem("crafty-theme"); if (s !== null) th = +s; }
 $("theme").value = th;
 setTheme(th);
 addEventListener("resize", () => drawAll());
-/* the plugin's window: every panel in one landscape layout (two rows of six, the pattern, keyboard and wavetables
-   below), drawn at one design size and scaled as a whole to the window, as plugins are. The plugin keeps the window
-   to this shape, so dragging its corner makes the whole GUI bigger or smaller. */
-const DESIGN_W = 2480;
-let lastH = 0;
-function layoutPlugin() {
-  const bottom = el("div", { class: "bottom" }), left = el("div", { class: "bottom-left" });
-  left.append($("seqpanel"), $("kb").closest("section"));
-  bottom.append(left, $("ubanks").closest("section"));
-  $("rack").after(bottom);
-}
+/* the plugin's window: 0.7's layout, drawn at one width and zoomed to the window's width, so dragging the corner makes
+   the whole GUI bigger or smaller (Serum-style) instead of moving the panels; the page scrolls down as in 0.7 */
+const DESIGN_W = 1240;
 function applyScale() {
   if (!inPlugin) return;
-  const root = document.documentElement;
   document.body.style.width = `${DESIGN_W}px`;
-  root.style.zoom = "1";
-  const h = Math.max(document.body.scrollHeight, 1);
-  if (h !== lastH) {                               // the design's shape, for the window's corner
-    lastH = h;
-    window.__JUCE__.backend.emitEvent("crafty-ui", { w: DESIGN_W, h });
-  }
-  root.style.zoom = String(Math.max(0.2, Math.min(3, Math.min(innerWidth / DESIGN_W, innerHeight / h))));
-  seenH = document.body.scrollHeight;
+  document.documentElement.style.zoom = String(Math.max(0.3, Math.min(4, innerWidth / DESIGN_W)));
 }
-let seenH = 0;
 if (inPlugin) {
-  layoutPlugin();
   addEventListener("resize", applyScale);
-  setInterval(() => { if (document.body.scrollHeight !== seenH) applyScale(); }, 1000);   // a panel grew: re-fit
-  setTimeout(applyScale, 0);
+  applyScale();
 }
 if (inPlugin) {
   document.body.classList.add("plugin");

@@ -83,11 +83,9 @@ a { color: var(--acc); }
 
 /* inside the AU / VST3 plugin: the host plays the sound and the plugin is always "connected" */
 body.plugin #audio, body.plugin #connect, body.plugin .meter, body.plugin a[href*="flasher"] { display: none; }
-/* the plugin's window: one landscape layout (app.js layoutPlugin), scaled as a whole to the window */
-body.plugin { margin: 0; overflow: hidden; }
+/* the plugin's window: 0.7's layout at one width, zoomed to the window (app.js applyScale) */
+body.plugin { margin: 0; overflow-x: hidden; }
 body.plugin .rack { max-width: none; }
-body.plugin .rack > * { grid-column: span 2; }
-body.plugin .bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px 16px 12px; }
-body.plugin .bottom .panel.wide { margin: 0; max-width: none; }
-body.plugin .bottom-left { display: flex; flex-direction: column; gap: 10px; }
-body.plugin p.small { display: none; }
+body.plugin .osc, body.plugin .voice, body.plugin .filter, body.plugin .env, body.plugin .lfo, body.plugin .matrix,
+body.plugin .fx, body.plugin .arp { grid-column: span 4 !important; }   /* 0.7's three columns at every window size */
+body.plugin .panel.wide { margin-left: 16px; margin-right: 16px; max-width: none; }

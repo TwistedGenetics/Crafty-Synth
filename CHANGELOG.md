@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10 beta (2026-11-23)
+
+- **The AU / VST3 window is 0.7's layout again**, and dragging the window's corner zooms the whole GUI with it,
+  Serum 2-style, instead of moving the panels around. The page scrolls down as it did in 0.7. 0.9's landscape
+  layout is gone. The project keeps the window's size.
+- Kept from 0.8: NAME beside SAVE, and every parameter as a mod destination.
+
 ## 0.9 beta (2026-11-23)
 
 - **The AU / VST3 window is one GUI again, scaled from its corner**: every panel in one landscape layout (two rows of

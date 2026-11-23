@@ -11,7 +11,6 @@ public:
     explicit CraftyEditor(CraftyProcessor &);
     ~CraftyEditor() override;
     void resized() override;
-    void setShape(double w, double h);              // the web layout's size: the window keeps its aspect
 
 private:
     CraftyProcessor &proc;
