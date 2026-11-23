@@ -89,3 +89,8 @@ body.plugin .rack { max-width: none; }
 body.plugin .osc, body.plugin .voice, body.plugin .filter, body.plugin .env, body.plugin .lfo, body.plugin .matrix,
 body.plugin .fx, body.plugin .arp { grid-column: span 4 !important; }   /* 0.7's three columns at every window size */
 body.plugin .panel.wide { margin-left: 16px; margin-right: 16px; max-width: none; }
+/* the plugin's resize handle (app.js resizeHandle): stays in the window's corner whatever the zoom */
+.resizer { position: fixed; right: 0; bottom: 0; width: 22px; height: 22px; cursor: nwse-resize; z-index: 100;
+  background: linear-gradient(135deg, transparent 0 45%, var(--soft) 45% 52%, transparent 52% 62%, var(--soft) 62% 69%,
+  transparent 69% 79%, var(--soft) 79% 86%, transparent 86%); }
+.resizer:hover { background-color: rgba(63, 169, 245, 0.25); }

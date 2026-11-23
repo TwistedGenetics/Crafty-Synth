@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11 beta (2026-11-23)
+
+- **The AU / VST3 window resizes from a handle in its bottom-right corner** (the three lines), Serum-style: drag it
+  and the window and the whole GUI grow or shrink together. In 0.10 the window's own corner sat under the editor and
+  couldn't be grabbed. Hosts that resize plugin windows by their edges do that too.
+
 ## 0.10 beta (2026-11-23)
 
 - **The AU / VST3 window is 0.7's layout again**, and dragging the window's corner zooms the whole GUI with it,

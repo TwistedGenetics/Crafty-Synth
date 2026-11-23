@@ -27,8 +27,8 @@ plugin the way they work on an FM-1.
 
 - **Naming a preset:** type in **NAME** (12 characters, as the FM-1 shows them: capitals, digits, space, a little
   punctuation), pick a user slot, **SAVE** (or Enter in the name).
-- **Size:** drag the window's corner: the whole GUI zooms with the window's width (Serum 2-style), from small up to
-  4x, without the panels moving. The project keeps the window's size.
+- **Size:** drag the handle in the bottom-right corner (the three lines): the window and the whole GUI grow or shrink
+  together (Serum 2-style; the zoom follows the width), without the panels moving. The project keeps the size.
 
 - **Every patch value is a host parameter** (79, named as on the FM-1's pages: "FILT EG ATTACK", "REVERB SIZE"...),
   showing its value the FM-1's way ("2.1KHZ", "1/8D", "LADDER"). Automate them, map them to a controller.

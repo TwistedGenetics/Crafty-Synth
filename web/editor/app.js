@@ -789,9 +789,32 @@ function applyScale() {
   document.body.style.width = `${DESIGN_W}px`;
   document.documentElement.style.zoom = String(Math.max(0.3, Math.min(4, innerWidth / DESIGN_W)));
 }
+/* the resize handle in the bottom-right corner (Serum-style): the plugin's window can't be dragged by an edge of its
+   own (the page covers it), so dragging this asks the plugin for a new size; the zoom follows the width */
+function resizeHandle() {
+  const h = el("div", { class: "resizer", title: "Drag to resize" });
+  let sx = 0, sy = 0, sw = 0, shh = 0, want = null, busy = false;
+  const send = () => {
+    busy = false;
+    if (want) window.__JUCE__.backend.emitEvent("crafty-resize", want);
+  };
+  h.onpointerdown = (e) => {
+    e.preventDefault();
+    h.setPointerCapture(e.pointerId);
+    sx = e.screenX; sy = e.screenY; sw = innerWidth; shh = innerHeight;   // the window's size in screen pixels
+  };
+  h.onpointermove = (e) => {
+    if (!h.hasPointerCapture(e.pointerId)) return;
+    want = { w: Math.round(sw + e.screenX - sx), h: Math.round(shh + e.screenY - sy) };
+    if (!busy) { busy = true; requestAnimationFrame(send); }
+  };
+  h.onpointerup = (e) => { h.releasePointerCapture(e.pointerId); want = null; };
+  document.body.append(h);
+}
 if (inPlugin) {
   addEventListener("resize", applyScale);
   applyScale();
+  resizeHandle();
 }
 if (inPlugin) {
   document.body.classList.add("plugin");

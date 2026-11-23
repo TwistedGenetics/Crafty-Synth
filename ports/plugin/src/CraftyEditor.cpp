@@ -46,6 +46,15 @@ CraftyEditor::CraftyEditor(CraftyProcessor &p)
               .withNativeIntegrationEnabled()
               .withKeepPageLoadedWhenBrowserIsHidden()
               .withResourceProvider(resource)
+              .withEventListener("crafty-resize", [this](const juce::var &v) {   // the page's corner handle
+                  if (auto *o = v.getDynamicObject()) {
+                      auto *c = getConstrainer();
+                      const int w = juce::jlimit(c->getMinimumWidth(), c->getMaximumWidth(), (int)o->getProperty("w"));
+                      const int h = juce::jlimit(c->getMinimumHeight(), c->getMaximumHeight(), (int)o->getProperty("h"));
+                      if (w != getWidth() || h != getHeight())
+                          setSize(w, h);
+                  }
+              })
               .withEventListener("crafty-midi", [this](const juce::var &v) {
                   std::vector<uint8_t> f;
                   if (auto *a = v.getArray())
@@ -61,7 +70,9 @@ CraftyEditor::CraftyEditor(CraftyProcessor &p)
             a.add((int)b);
         web.emitEventIfBrowserIsVisible("crafty-midi", juce::var(a));
     };
-    setResizable(true, true);                       // drag the corner: the whole GUI zooms with the window (Serum-style)
+    // resizable by the host's window edges, and by the page's own corner handle ("crafty-resize"): JUCE's corner
+    // component would sit under the web view, where it can't be reached
+    setResizable(true, false);
     setResizeLimits(600, 400, 4000, 3000);
     setSize(proc.editorW, proc.editorH);
     web.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
