@@ -35,6 +35,7 @@ typedef struct {
     char fpath[2][CR_TABLES_PATH];              /*   ... their paths (kept when missing: the project finds them later) */
     int16_t waves[2][5][CR_WT_N];
     int rkeep;                                  /* RANDOM keeps the tables */
+    int shown[2];                               /* the 3D views' bank as last reported (w1shown, w2shown; -1: not yet) */
     uint32_t seed;
 } mpc_t;
 
@@ -131,6 +132,12 @@ static void set_file(mpc_t *m, int k, uint32_t id)
     }
     cr_inst_file_table(&m->in, (uint32_t)k, ok ? (const int16_t (*)[CR_WT_N])m->waves[k] : 0);
 }
+/* what wave k's 3D view shows (the skin's w<k>shown): 0 a user bank or a wavetable file, else factory bank + 1 */
+static int shown_of(const mpc_t *m, int k)
+{
+    uint32_t b = cr_bank_of(m->in.p.p[k ? CR_W2BANK : CR_W1BANK], k);
+    return m->in.file[k] || b >= CR_NBANK ? 0 : (int)b + 1;
+}
 static int saved_slot(void *ctx, uint32_t slot) { return cr_user_saved(((mpc_t *)ctx)->user, slot); }
 static void random_patch(mpc_t *m)
 {
@@ -195,6 +202,7 @@ static void *create(const char *dir)
     cr_inst_set_user(&m->in, m->user);
     (void)cr_inst_take_patch_changed(&m->in);
     tabs_scan(dir);
+    m->shown[0] = m->shown[1] = -1;
     return m;
 }
 static void destroy(void *p) { free(p); }
@@ -351,6 +359,8 @@ static int get_param(void *p, const char *key, char *buf, int n)
     }
     if (!strcmp(key, "random"))
         return snprintf(buf, (size_t)n, "0");
+    if (!strcmp(key, "w1shown") || !strcmp(key, "w2shown"))
+        return snprintf(buf, (size_t)n, "%d", shown_of(m, key[1] - '1'));
     if (!strcmp(key, "rkeep"))
         return snprintf(buf, (size_t)n, "%d", m->rkeep);
     if (!strcmp(key, "pbank"))
@@ -417,12 +427,21 @@ int mpc_engine_changed(void *p, char *key, int len)
     static const char *const PK[3] = {"preset", "pbank", "pslot"};
     mpc_t *m = p;
     uint32_t id;
+    int k;
     if (cr_inst_take_patch_changed(&m->in))
         m->report = 3 + CR_NP + 2;              /* a new patch: every value moved */
     if (m->report > 0) {                        /* (after RANDOM, the two table files too) */
         int k = 3 + (int)CR_NP + 2 - m->report--;
         snprintf(key, (size_t)len, "%s", k < 3 ? PK[k] : k < 3 + (int)CR_NP ? KEYS[k - 3] : k == 3 + (int)CR_NP ? "table1" : "table2");
         return 1;
+    }
+    for (k = 0; k < 2; k++) {                   /* the 3D views follow the bank (or file) that plays */
+        int s = shown_of(m, k);
+        if (s != m->shown[k]) {
+            m->shown[k] = s;
+            snprintf(key, (size_t)len, "w%dshown", k + 1);
+            return 1;
+        }
     }
     if ((id = cr_inst_take_changed(&m->in)) == 0)
         return 0;

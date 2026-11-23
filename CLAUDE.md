@@ -19,7 +19,8 @@ an instance, and the editor protocol for the plugins), `web/editor` (the web edi
    - A new or changed parameter: `src/core/cr_patch.[ch]` (append only: ids never move), its value text in
      `src/core/cr_text.c`, its page in `TX_PAGE` there, the FM-1's page in `src/app/cr_app.c`, the editor
      (`tools/gen_presets.py --meta web/editor/meta.js`, its panel in `web/editor/app.js`), the MPC
-     (`python3 ports/mpc/make_port.py`, and a page for it in `ports/mpc/gen_params.c`'s `SECTIONS`). The AU / VST3
+     (`python3 ports/mpc/make_port.py`, and a page for it in `ports/mpc/gen_params.c`'s `SECTIONS`; an oscillator
+     value also goes on the hand-made OSC page, `OSC` in `make_port.py`). The AU / VST3
      picks it up by itself (its parameters come from `cr_patch.h` and `cr_keys.h`).
    - Every parameter is also a mod destination: append a `CR_D_` (cr_patch.h), its name (`CR_DEST_NAME`), its
      parameter in `DEST_P` (cr_synth.c), and read it in the engine through the matrix (`e[]`, or `er()` for a stepped

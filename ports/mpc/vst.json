@@ -6,6 +6,8 @@
  "so": "craftysynth.so",
  "params": "params.json",
  "layout": "layout.conf",
+ "art": "html",
+ "skin_post": "skin_post.py",
  "title_font": "fonts/BarlowSemiCondensed-Bold.ttf",
  "programs": {
   "param": "preset"

@@ -74,13 +74,17 @@ A project saved on one MPC opens on any other.
 
 | Page | Controls |
 |---|---|
-| OSC A / OSC B | Wave 1, bank 1, mod, mod mode, mix, spread, glide, octave · Wave 2, bank 2, B mode, B mod, tune, fine |
+| OSC | the editor's two oscillator panels: each bank's wavetable in 3D (as the editor draws it, following WT POS), the bank list in the head · OSC A: WT POS, OSC MOD, MOD MODE, TABLE FILE, MIX, SPREAD, GLIDE, OCTAVE · OSC B: WT POS, TUNE, FINE, B MOD, B MODE, TABLE FILE |
 | SUB OSC / FILTER | sub level, octave, wave · cutoff, reso, morph, type, filter EG, distortion |
 | FILTER EG / AMP EG | the filter envelope · the amp envelope, amp EG amount, volume |
 | MOD EG / LFO 1 / LFO 2 | the mod envelope · LFO 1 · LFO 2 (rate, shape, mode, sync) |
 | MATRIX | one destination and depth per source (LFO 1 - NOTE, then VELO - AFTTCH) |
 | REVERB / DELAY / MOD FX | the Horizon reverb (mode, size, decay, mix, warp, density, mod) · the delay · chorus, phaser |
-| CRUSH / PRESET / TABLE FILES / ARP-SEQ | era, crush, OTT · bank, slot, preset, RANDOM, RND TABLES · TABLE 1, TABLE 2 · arp, tempo, rate |
+| CRUSH / PRESET / ARP-SEQ | era, crush, OTT · bank, slot, preset, RANDOM, RND TABLES · arp, tempo, rate |
+
+**The look** (0.14) is the editor's and the plugin window's: the SERUM colours, rounded panels, each control in its
+own cell, the same knobs. The 3D view shows the bank playing (a user bank or a table file shows YOUR WAVETABLE: its
+waves are only known on the MPC) and follows WT POS in 16 steps; touching it moves WT POS.
 
 - **Presets**: BANK (1-8 factory, U1-U16 user) and SLOT step one at a time; PRESET runs through all 192, and MPC's
   own PRESET menu lists them by name.
@@ -89,7 +93,8 @@ A project saved on one MPC opens on any other.
 - **Your user presets and wavetables**: copy `Crafty Synth.user` from your Mac (path above) into the plugin's `data`
   folder on the MPC (`VST2 Plugins/Twisted Genetics - VST - Crafty Synth/data/`).
 - **Wavetable files** (0.13): WAVs in `data/Wavetables` (sub-folders too) are numbered in `data/TableIndex.txt`;
-  **TABLE 1** / **TABLE 2** play one by its number in place of OSC A's / OSC B's bank (0: the bank), shown by name.
+  **TABLE FILE** on the OSC page plays one by its number in place of that oscillator's bank (0: the bank), shown
+  by name.
   New files get their numbers in name order when the plugin loads. Copy `Wavetables` and `TableIndex.txt` from the Mac
   or the Tracker to keep the same numbers.
 - **RANDOM** (a button on the PRESET page) picks a preset and varies it, as the FM-1's; **RND TABLES** = KEEP leaves
@@ -102,7 +107,8 @@ A project saved on one MPC opens on any other.
 `src/host/cr_proto.c` answers the editor's protocol (docs/PROTOCOL.md) over a user area in RAM; the editor's
 WebAssembly preview, the AU / VST3 and the MPC plugin all use them. `ports/plugin` is the JUCE wrapper and
 `ports/mpc` the MPC toolkit's engine interface, with its parameters and skin made from the engine's own tables
-(`make_port.py`); Akai's SDK (`external/mpc-plugin-builder-sdk`, `legacy_convert.py` and `validate.py`) turns its two
+(`make_port.py`: the OSC page by hand, the others by the toolkit's auto-layout, all in `crafty.css`'s look; the 3D
+views are `make_views.py`'s filmstrips, `make_port.py --views` redraws them); Akai's SDK (`external/mpc-plugin-builder-sdk`, `legacy_convert.py` and `validate.py`) turns its two
 builds into the official package. CI builds the FM-1 first, then the plugins (CLAUDE.md).
 
 0.13 shares three more pieces with every version and the Twisted Tracker's CRAFTY: `src/host/cr_wav.c` (WAV files to

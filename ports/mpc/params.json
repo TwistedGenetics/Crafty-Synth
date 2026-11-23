@@ -1,9 +1,9 @@
 {
  "name": "Crafty Synth",
  "params": [
-  {"key": "pbank", "name": "Bank", "min": 0, "max": 23, "default": 0, "display": "int", "dynamic_display": true, "refresh_display": true},
-  {"key": "pslot", "name": "Slot", "min": 1, "max": 8, "default": 1, "display": "int", "refresh_display": true},
-  {"key": "preset", "name": "Preset", "min": 0, "max": 191, "default": 0, "display": "int", "dynamic_display": true, "refresh_display": true, "nudge_pct": 10},
+  {"key": "pbank", "name": "BANK", "min": 0, "max": 23, "default": 0, "display": "int", "dynamic_display": true, "refresh_display": true},
+  {"key": "pslot", "name": "SLOT", "min": 1, "max": 8, "default": 1, "display": "int", "refresh_display": true},
+  {"key": "preset", "name": "PRESET", "min": 0, "max": 191, "default": 0, "display": "int", "dynamic_display": true, "refresh_display": true, "nudge_pct": 10},
   {"key": "w1pos", "name": "WAVE 1", "min": 0, "max": 127, "default": 127, "dynamic_display": true},
   {"key": "w2pos", "name": "WAVE 2", "min": 0, "max": 127, "default": 96, "dynamic_display": true},
   {"key": "mix", "name": "OSC MIX", "min": 0, "max": 127, "default": 0, "dynamic_display": true},
@@ -89,7 +89,9 @@
   {"key": "table1", "name": "TABLE 1", "min": 0, "max": 4000, "default": 0, "display": "int", "dynamic_display": true, "nudge_pct": 1},
   {"key": "table2", "name": "TABLE 2", "min": 0, "max": 4000, "default": 0, "display": "int", "dynamic_display": true, "nudge_pct": 1},
   {"key": "random", "name": "RANDOM", "min": 0, "max": 1, "default": 0, "type": "trigger", "momentary": true},
-  {"key": "rkeep", "name": "RND TABLES", "options": ["NEW", "KEEP"], "default": 0}
+  {"key": "rkeep", "name": "RND TABLES", "options": ["NEW", "KEEP"], "default": 0},
+  {"key": "w1shown", "name": "VIEW 1", "options": ["USER", "ANALOGUE", "DIGITAL 1", "MATH", "POLYGON", "CURATED 1", "FORMANT", "DIGITAL 2", "CURATED 2"], "default": 1},
+  {"key": "w2shown", "name": "VIEW 2", "options": ["USER", "ANALOGUE", "DIGITAL 1", "MATH", "POLYGON", "CURATED 1", "FORMANT", "DIGITAL 2", "CURATED 2", "SINE/NOISE"], "default": 1}
  ],
  "sections": [
   {"label": "OSC A", "keys": ["w1pos", "w1bank", "omamt", "ommode", "mix", "spread", "glide", "oct"]},
@@ -108,7 +110,6 @@
   {"label": "MOD FX", "keys": ["chmix", "chrate", "phmix", "phrate"]},
   {"label": "CRUSH", "keys": ["era", "crush", "ott"]},
   {"label": "PRESET", "keys": ["pbank", "pslot", "preset", "random", "rkeep"]},
-  {"label": "TABLE FILES", "keys": ["table1", "table2"]},
   {"label": "ARP-SEQ", "keys": ["arp", "tempo", "arprate"]}
  ]
 }

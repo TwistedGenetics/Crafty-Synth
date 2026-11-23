@@ -38,7 +38,6 @@ static const char *const SECTIONS[][9] = {
     {"MOD FX", "CHMIX", "CHRATE", "PHMIX", "PHRATE", 0},
     {"CRUSH", "ERA", "CRUSH", "OTT", 0},
     {"PRESET", "@pbank", "@pslot", "@preset", "@random", "@rkeep", 0},
-    {"TABLE FILES", "@table1", "@table2", 0},
     {"ARP-SEQ", "ARP", "TEMPO", "ARPRATE", 0},
 };
 
@@ -50,11 +49,11 @@ int main(void)
     printf("{\n \"name\": \"Crafty Synth\",\n \"params\": [\n");
     /* the preset three ways: BANK (1-8 factory, U1-U16 user) and SLOT step one a click; PRESET (all 192, MPC's
      * PRESET menu) moves one a Q-Link event or wheel click with nudge_pct */
-    printf("  {\"key\": \"pbank\", \"name\": \"Bank\", \"min\": 0, \"max\": %u, \"default\": 0, \"display\": \"int\", "
+    printf("  {\"key\": \"pbank\", \"name\": \"BANK\", \"min\": 0, \"max\": %u, \"default\": 0, \"display\": \"int\", "
            "\"dynamic_display\": true, \"refresh_display\": true},\n", CR_NPRESET / 8u - 1u);
-    printf("  {\"key\": \"pslot\", \"name\": \"Slot\", \"min\": 1, \"max\": 8, \"default\": 1, \"display\": \"int\", "
+    printf("  {\"key\": \"pslot\", \"name\": \"SLOT\", \"min\": 1, \"max\": 8, \"default\": 1, \"display\": \"int\", "
            "\"refresh_display\": true},\n");
-    printf("  {\"key\": \"preset\", \"name\": \"Preset\", \"min\": 0, \"max\": %u, \"default\": 0, \"display\": \"int\", "
+    printf("  {\"key\": \"preset\", \"name\": \"PRESET\", \"min\": 0, \"max\": %u, \"default\": 0, \"display\": \"int\", "
            "\"dynamic_display\": true, \"refresh_display\": true, \"nudge_pct\": 10}",
            CR_NPRESET - 1u);
     for (i = 0; i < CR_NP; i++) {
@@ -105,6 +104,16 @@ int main(void)
     printf(",\n  {\"key\": \"random\", \"name\": \"RANDOM\", \"min\": 0, \"max\": 1, \"default\": 0, \"type\": \"trigger\", "
            "\"momentary\": true}");
     printf(",\n  {\"key\": \"rkeep\", \"name\": \"RND TABLES\", \"options\": [\"NEW\", \"KEEP\"], \"default\": 0}");
+    /* the 3D wavetable views (make_port.py's OSC page): which bank each oscillator shows, set by the engine
+     * (0: a user bank or a wavetable file, 1..: factory bank n - 1); no control, the views follow it */
+    for (k = 1; k <= 2; k++) {
+        printf(",\n  {\"key\": \"w%ushown\", \"name\": \"VIEW %u\", \"options\": [\"USER\"", k, k);
+        for (i = 0; i < (k == 1 ? CR_BANK_NOISE : CR_NBANK); i++) {
+            printf(", ");
+            js(CR_BANK_NAME[i]);
+        }
+        printf("], \"default\": 1}");
+    }
     printf("\n ],\n \"sections\": [\n");
     for (s = 0; s < sizeof SECTIONS / sizeof SECTIONS[0]; s++) {
         printf("%s  {\"label\": ", s ? ",\n" : "");

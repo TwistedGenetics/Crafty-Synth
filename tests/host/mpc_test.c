@@ -84,7 +84,7 @@ int main(int argc, char **argv)
     i = 0;
     while (mpc_engine_changed(m, key, sizeof key))
         i++;
-    CHECK(i == 3 + (int)CR_NP + 2, "a preset reported %d keys", i);
+    CHECK(i >= 3 + (int)CR_NP + 2 && i <= 3 + (int)CR_NP + 4, "a preset reported %d keys", i);
     e->set_param(m, "pslot", "3");
     CHECK(!strcmp(get(e, m, "preset"), "66"), "slot 3: preset %s", get(e, m, "preset"));
     /* a CC on the track: the screen is told */
@@ -100,6 +100,13 @@ int main(int argc, char **argv)
     CHECK(!strcmp(get(e, m, "table2"), "1") && !strcmp(get(e, m, "table2_display"), "Saw Up"), "table2: %s %s",
           get(e, m, "table2"), get(e, m, "table2_display"));
     CHECK(!strcmp(get(e, m, "table1_display"), "BANK"), "table1 shows %s", get(e, m, "table1_display"));
+    {   /* the OSC page's 3D views: wave 2 plays a file (USER view), wave 1 its factory bank */
+        int saw2 = 0;
+        while (mpc_engine_changed(m, key, sizeof key))
+            saw2 |= !strcmp(key, "w2shown");
+        CHECK(saw2 && !strcmp(get(e, m, "w2shown"), "0"), "w2shown: %s", get(e, m, "w2shown"));
+        CHECK(atoi(get(e, m, "w1shown")) >= 1, "w1shown: %s", get(e, m, "w1shown"));
+    }
     {
         char before[512];
         int same = 1, t;

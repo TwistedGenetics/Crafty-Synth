@@ -1,0 +1,25 @@
+/* Crafty Synth on the MPC: the editor's and the AU / VST3's look (web/editor/style.css, SERUM theme) for the toolkit's
+ * browser-drawn skin (tools/html_art/default.css lists the classes). Panels: rounded, filled; titles in Barlow;
+ * knobs: a grey track, the accent arc, a flat face and a white pointer, as the editor draws them. */
+@font-face { font-family: "Barlow Semi Condensed"; font-weight: 700; src: url("fonts/BarlowSemiCondensed-Bold.ttf"); }
+:root {
+  --title-font: "Barlow Semi Condensed", sans-serif;
+  --title-size: 24px;
+  --label-size: 16px;
+  --sheen: 0;
+  --shadow: none;
+  --radius: 6px;
+}
+.frame-border { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; rx: 8px; }
+.frame-rule { display: none; }
+.frame-title { fill: var(--ink); letter-spacing: 0.04em; }
+.knob-track { stroke: var(--knob-ring); stroke-width: 6px !important; }
+.knob-arc { stroke: var(--accent); stroke-width: 6px !important; }
+.knob-face { fill: var(--panel); }
+.knob-pointer { stroke: var(--ink); stroke-width: 3.5px !important; }
+.box-label { fill: var(--ink-dim); font-family: "Barlow Semi Condensed", sans-serif; letter-spacing: 0.04em; }
+.box { fill: var(--bar); stroke: var(--line); rx: 5px; }
+.arrow-bg { fill: none; }
+.arrow { fill: var(--accent); }
+.button-bg { fill: var(--bar); stroke: var(--line); }
+.tile { rx: 4px; }

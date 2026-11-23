@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.14 beta (2026-11-23)
+
+- **MPC: the AU / VST3's look, and the 3D wavetable views.** The MPC skin is now drawn like the editor and the plugin
+  window (SERUM colours, rounded panels, each control in its own cell, Barlow titles, the editor's knobs: grey track,
+  blue arc, white pointer).
+  - A new first page, **OSC**, is the editor's two oscillator panels: the A / B badge, the bank list in the head, the
+    bank's wavetable drawn in 3D (its frames stacked in depth, the one playing bright and filled, as in the editor)
+    and below it the controls. The view follows WT POS (16 steps), the bank and a table file; a user bank or a table
+    file shows YOUR WAVETABLE (its waves are only known on the MPC). Touching the view moves WT POS.
+  - OSC A: WT POS, OSC MOD, MOD MODE, TABLE FILE, MIX, SPREAD, GLIDE, OCTAVE; OSC B: WT POS, TUNE, FINE, B MOD,
+    B MODE, TABLE FILE (the TABLE FILES page is gone: its two controls are here).
+  - FM-1, editor and AU / VST3: unchanged.
+
 ## 0.13 beta (2026-11-23)
 
 Lined up with the Twisted Tracker's CRAFTY engine (its v1.17 / v1.18 changes), so all of them behave the same.
