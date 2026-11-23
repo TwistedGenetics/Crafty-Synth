@@ -310,7 +310,9 @@ function build() {
     rack.append(panel("osc", head(w, `OSC ${w}`, bankSel), views[`wt${w}`], ks));
   }
   rack.append(panel("voice", head(null, "VOICE"), el("div", { class: "knobs" }, knob("MIX"), knob("SPREAD"), knob("GLIDE"),
-    pick("OCT", "OCTAVE"), knob("VOL"), knob("AEGAMT", "AMP EG"))));
+    pick("OCT", "OCTAVE"), knob("VOL"), knob("AEGAMT", "AMP EG")),
+    el("div", { class: "subhead", textContent: "SUB OSC" }),             // 0.12: under OSC A, before the filter
+    el("div", { class: "knobs" }, knob("SUBLVL", "LEVEL"), pick("SUBOCT", "OCTAVE"), pick("SUBWAVE", "WAVE"))));
   views.filter = el("canvas", { class: "view" });
   rack.append(panel("filter", head(null, "FILTER"), views.filter,
     el("div", { class: "knobs" }, pick("FTYPE", "TYPE"), knob("CUT"), knob("RES"), knob("MORPH"), knob("FEGAMT", "FILT EG"))));

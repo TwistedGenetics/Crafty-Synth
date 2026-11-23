@@ -149,6 +149,47 @@ int main(void)
         cr_inst_all_off(b);
     }
 
+    /* 0.12: the sub, two octaves under A4 (110 Hz): the same patch with and without it, the difference is the sub */
+    {
+        float la[256], lb[256];
+        uint32_t w, blk, zc, k;
+        float prev, pk;
+        for (w = 0; w < 3u; w += 2u) {
+            cr_inst_t *in[2] = {a, b};
+            for (k = 0; k < 2u; k++) {
+                cr_inst_init(in[k]);                  /* fresh: the same oscillator phases in both */
+                cr_inst_set_user(in[k], st->user);
+                cr_inst_param(in[k], CR_SUBLVL, k ? 0 : 127);
+                cr_inst_param(in[k], CR_SUBOCT, 96);      /* -2 OCT */
+                cr_inst_param(in[k], CR_SUBWAVE, w ? 106 : 0);
+                cr_inst_transport(in[k], -1.0, 0.f, 0);
+                midi3(in[k], 0x90, 69, 100);
+            }
+            zc = 0;
+            pk = 0.f;
+            prev = 0.f;
+            for (blk = 0; blk < 345u; blk++) {       /* 1 s */
+                cr_inst_render(a, la, 128);
+                cr_inst_render(b, lb, 128);
+                if (blk < 10u)
+                    continue;
+                for (k = 0; k < 128u; k++) {
+                    float x = la[2 * k] - lb[2 * k];
+                    pk = x > pk ? x : pk;
+                    if (prev < 0.f && x >= 0.f)
+                        zc++;
+                    prev = x;
+                }
+            }
+            cr_inst_all_off(a);
+            cr_inst_all_off(b);
+            printf("inst: the sub (%s, -2 OCT under A4): %.1f Hz, peak %.2f\n", w ? "square" : "sine",
+                   (double)zc * 44100.0 / (335.0 * 128.0), (double)pk);
+            CHECK(pk > 0.1f, "the sub is silent");
+            CHECK(zc >= 104u && zc <= 108u, "the sub is at %u cycles, not about 106 (110 Hz in 0.97 s)", zc);
+        }
+    }
+
     /* 0.8: every value is a destination: the mod wheel moves Wave 1's bank and the arp's tempo */
     {
         float lr[256];

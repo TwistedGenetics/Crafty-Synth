@@ -23,6 +23,7 @@ static void js(const char *s)
 static const char *const SECTIONS[][9] = {
     {"OSC A", "W1POS", "W1BANK", "OMAMT", "OMMODE", "MIX", "SPREAD", "GLIDE", "OCT"},
     {"OSC B", "W2POS", "W2BANK", "BMODE", "BAMT", "TUNE", "FINE", 0},
+    {"SUB OSC", "SUBLVL", "SUBOCT", "SUBWAVE", 0},
     {"FILTER", "CUT", "RES", "MORPH", "FTYPE", "FEGAMT", "DIST", 0},
     {"FILTER EG", "FA", "FD", "FS", "FR", 0},
     {"AMP EG", "AA", "AD", "AS", "AR", "AEGAMT", "VOL", 0},
@@ -76,6 +77,10 @@ int main(void)
         printf(", \"name\": ");
         js(name);
         mpc_list(i, &l);
+        if (l.n > MPC_MAXOPT) {
+            fprintf(stderr, "gen_params: %s has more than %u choices: raise MPC_MAXOPT\n", CR_KEY[i], MPC_MAXOPT);
+            return 1;
+        }
         if (l.n) {
             printf(", \"options\": [");
             for (k = 0; k < l.n; k++) {

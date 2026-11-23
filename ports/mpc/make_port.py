@@ -85,7 +85,29 @@ def bigger(layout, names):
             if re.match(r"\s*popup\b", ln) and " tsize=" not in ln:
                 ln += " tsize=18"
         out.append(ln)
-    return "\n".join(out) + "\n"
+    return align_popups(out)
+
+
+def align_popups(lines):
+    """every pop-up on its row: 20 px under the nearest knob centre in its frame, as the auto-layout's own pop-ups"""
+    frames, cur = [], None
+    for i, ln in enumerate(lines):
+        if ln.startswith("frame ") or ln.startswith("[tab"):
+            cur = {"knobs": [], "popups": []}
+            frames.append(cur)
+        elif cur is not None:
+            m = re.search(r" cy=(\d+)", ln)
+            if m and ln.lstrip().startswith("knob "):
+                cur["knobs"].append(int(m[1]))
+            elif m and ln.lstrip().startswith("popup "):
+                cur["popups"].append((i, int(m[1])))
+    for f in frames:
+        for i, cy in f["popups"]:
+            if f["knobs"]:
+                k = min(f["knobs"], key=lambda c: abs(c + 20 - cy))
+                if abs(k + 20 - cy) <= 60:
+                    lines[i] = re.sub(r" cy=\d+", f" cy={k + 20}", lines[i], count=1)
+    return "\n".join(lines) + "\n"
 
 
 def main():

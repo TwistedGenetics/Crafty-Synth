@@ -67,11 +67,12 @@ A project saved on one MPC opens on any other.
 | Page | Controls |
 |---|---|
 | OSC A / OSC B | Wave 1, bank 1, mod, mod mode, mix, spread, glide, octave · Wave 2, bank 2, B mode, B mod, tune, fine |
-| FILTER / FILTER EG | cutoff, reso, morph, type, filter EG, distortion · attack, decay, sustain, release |
-| AMP EG / MOD EG / LFO 1 | the amp envelope, amp EG amount, volume · the mod envelope · LFO 1 |
-| LFO 2 / MATRIX | LFO 2 · the matrix, one destination and depth per source |
-| REVERB / DELAY | the Horizon reverb (mode, size, decay, mix, warp, density, mod) · the delay |
-| MOD FX / CRUSH / PRESET / ARP-SEQ | chorus, phaser · era, crush, OTT · bank, slot, preset · arp, tempo, rate |
+| SUB OSC / FILTER | sub level, octave, wave · cutoff, reso, morph, type, filter EG, distortion |
+| FILTER EG / AMP EG | the filter envelope · the amp envelope, amp EG amount, volume |
+| MOD EG / LFO 1 / LFO 2 | the mod envelope · LFO 1 · LFO 2 (rate, shape, mode, sync) |
+| MATRIX | one destination and depth per source (LFO 1 - NOTE, then VELO - AFTTCH) |
+| REVERB / DELAY / MOD FX | the Horizon reverb (mode, size, decay, mix, warp, density, mod) · the delay · chorus, phaser |
+| CRUSH / PRESET / ARP-SEQ | era, crush, OTT · bank, slot, preset · arp, tempo, rate |
 
 - **Presets**: BANK (1-8 factory, U1-U16 user) and SLOT step one at a time; PRESET runs through all 192, and MPC's
   own PRESET menu lists them by name.

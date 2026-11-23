@@ -33,7 +33,9 @@ const BMODE = ["FM FROM A", "PM FROM A", "SYNC TO A", "RING WITH A", "WAVEFOLD"]
 const FTYPE = ["SVF", "LADDER", "MS-20", "TB-303", "SEM", "STEINER", "POLIVOKS", "FORMANT", "COMB +/-", "PHASER", "DUAL PEAK", "DECIMATOR"];
 const VMODE = ["ROOM", "HALL", "HALO", "SWELL", "ABYSS", "DUB"];
 const ERA = ["OFF", "SP-1200", "MPC60", "S950", "S1000", "AMIGA"];
-export const LISTS = { BMODE, FTYPE, VMODE, ERA };
+const SUBOCT = ["-1 OCT", "-2 OCT"];
+const SUBWAVE = ["SINE", "TRIANGLE", "SQUARE"];
+export const LISTS = { BMODE, FTYPE, VMODE, ERA, SUBOCT, SUBWAVE };
 export function spreadShape(v) { return v < 64 ? 0 : Math.min(9, Math.floor((v - 64) / 7) + 1); }
 
 /* the choices a list-like parameter has: [value, label] (the middle of each band, as the firmware steps) */
@@ -48,7 +50,7 @@ export function choices(p) {
     case "ONOFF": return [[0, "OFF"], [127, "ON"]];
     case "DEST": return M.dests.map((n, i) => [i, n]);
     case "ARPRATE": return ARPRATE.map((n, i) => [Math.floor((i * 128) / 6) + 10, n]);
-    case "BMODE": case "FTYPE": case "VMODE": case "ERA": {
+    case "BMODE": case "FTYPE": case "VMODE": case "ERA": case "SUBOCT": case "SUBWAVE": {
       const l = LISTS[p.kind];
       return l.map((n, i) => [bandVal(i, l.length), n]);
     }
@@ -92,7 +94,7 @@ export function fmt(p, v, patch) {
     case "TEMPO": return `${40 + 2 * v} BPM`;
     case "ARPRATE": return ARPRATE[(v * 6) >> 7];
     case "DEST": return M.dests[v] || "NONE";
-    case "BMODE": case "FTYPE": case "VMODE": case "ERA": { const l = LISTS[p.kind]; return l[band(v, l.length)]; }
+    case "BMODE": case "FTYPE": case "VMODE": case "ERA": case "SUBOCT": case "SUBWAVE": { const l = LISTS[p.kind]; return l[band(v, l.length)]; }
     default: return String(v);
   }
 }

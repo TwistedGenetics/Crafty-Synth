@@ -30,6 +30,7 @@ almost word for word; the differences are listed at the end.
 | | WAVES | BANK 1 · BANK 2 · MOD MODE · SPREAD |
 | | OSC B | B MODE · B MOD · WAVE 2 · TUNE |
 | | TUNE | TUNE (Wave 2, ±48 semitones) · FINE (Wave 2, ±100 cents) · OCTAVE · GLIDE |
+| | SUB | SUB LVL · SUB OCT (-1 / -2) · SUB WAVE (SINE / TRI / SQUARE) · MIX |
 | **EDIT** | FILTER | CUTOFF · RESO · MORPH (LP → BP → HP, or the type's own sweep) · TYPE |
 | **ENV** | FILTER EG → AMP EG → MOD EG | ATTACK · DECAY · SUSTAIN · RELEASE |
 | **LFO** | LFO 1 → LFO 2 | RATE · SHAPE · MODE (retrigger / free / single) · SYNC |
@@ -88,6 +89,13 @@ in; breath (CC 2) can stand in for any of the three (GLO → SETUP → BREATH).
 OSC B's own modifier works alongside the 16 on OSC A. **B MODE**: OFF, FM (A's output bends B's pitch), PM (A pushes
 B's phase), SYNC (A restarts B; B MOD shifts B up for the classic sweep), RING (B times A), FOLD (B folds over itself).
 **B MOD** is the amount; it is also a matrix destination, so an LFO or the mod EG can sweep it.
+
+## Sub oscillator
+
+A sine, triangle or square one or two octaves under OSC A's note (its middle note: the spread doesn't move it), mixed
+in before the filter, so the filter, drive and effects treat it as part of the sound. **HOME** to the fifth page,
+**SUB**: SUB LVL (0 is off), SUB OCT, SUB WAVE; the screen draws the wave as tall as its level. All three are matrix
+destinations. The basses (WARM BASS, SUB BASS, REESE, ROLLER, DREAD, DONK, WOBBLE, MIN REESE, NEURO, DUB SEQ) use it.
 
 ## Filter types
 

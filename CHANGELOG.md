@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12 beta (2026-11-23)
+
+- **Sub oscillator** on every version: SUB LVL, SUB OCT (-1 / -2) and SUB WAVE (sine, triangle, square, its edges
+  smoothed), one or two octaves under OSC A, mixed in before the filter. All three are mod destinations (77 now).
+  - FM-1: its own page, HOME's fifth (SUB), the wave drawn as tall as its level, big text.
+  - Editor and AU / VST3: in the VOICE panel's free space (nothing else moves).
+  - MPC: a SUB OSC frame on the filter's page, its two lists as pop-ups.
+- The basses use it: WARM BASS, SUB BASS, REESE, ROLLER, DREAD, DONK, WOBBLE, MIN REESE, NEURO, DUB SEQ.
+- MPC fix: since 0.8 the matrix's destination lists stopped at 64 of 74 on the MPC; all 77 are there now, and the
+  build fails if a list ever outgrows its room. The MPC's pop-ups line up with their row's knobs.
+- Older patches load with the sub off.
+
 ## 0.11 beta (2026-11-23)
 
 - **The AU / VST3 window resizes from a handle in its bottom-right corner** (the three lines), Serum-style: drag it

@@ -301,6 +301,13 @@ EXTRA = {
     "ACID SEQ": dict(FTYPE="TB303"), "DUB SEQ": dict(VMODE="DUB", VMIX=0.3), "BLIPS": dict(VMODE="HALO", VMIX=0.25),
     "RAVE SEQ": dict(ERA="SP1200", CRUSH=0.3, VMODE="ROOM", VMIX=0.2),
 }
+# 0.12: the sub under the basses (level, octave 1 or 2 down, SINE / TRI / SQUARE)
+SUB = {"WARM BASS": (0.45, 1, "SINE"), "SUB BASS": (0.6, 1, "SINE"), "REESE": (0.5, 1, "SINE"),
+       "ROLLER": (0.45, 1, "SINE"), "MIN REESE": (0.5, 1, "SINE"), "DREAD": (0.4, 1, "SINE"),
+       "DONK": (0.35, 1, "TRI"), "WOBBLE": (0.45, 1, "SINE"), "NEURO": (0.4, 2, "SQUARE"), "DUB SEQ": (0.35, 1, "SINE")}
+SUBWAVES = ["SINE", "TRI", "SQUARE"]
+for _n, (_lv, _oc, _w) in SUB.items():
+    EXTRA.setdefault(_n, {}).update(SUBLVL=_lv, SUBOCT=_oc, SUBWAVE=_w)
 for _i, (_n, _b) in enumerate(PRESETS):
     if _n in EXTRA:
         _p = bytearray(_b)
@@ -309,6 +316,8 @@ for _i, (_n, _b) in enumerate(PRESETS):
             elif _k == "VMODE": _p[12 + P["VMODE"]] = band_val(VMODES.index(_v), 6)
             elif _k == "ERA": _p[12 + P["ERA"]] = band_val(ERAS.index(_v), 6)
             elif _k == "BMODE": _p[12 + P["BMODE"]] = band_val(BMODES.index(_v), 5)
+            elif _k == "SUBOCT": _p[12 + P["SUBOCT"]] = band_val(_v - 1, 2)
+            elif _k == "SUBWAVE": _p[12 + P["SUBWAVE"]] = band_val(SUBWAVES.index(_v), 3)
             elif isinstance(_v, float): _p[12 + P[_k]] = round(_v * 127)
             else: _p[12 + P[_k]] = _v
         PRESETS[_i] = (_n, bytes(_p))

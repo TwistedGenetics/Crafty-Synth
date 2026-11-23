@@ -25,6 +25,7 @@ a big screen and seven knobs to drive it.
   triangle fold, de-rez, rise/run phaseshaper, glitchy sine, window amp sync, FM, hard sync, min mod, sine fold, bit
   crush, scrunch, lo-fi phaseshaper and vocal sync.
 - **OSC B modifier** (beyond the CRAFTsynth): FM, PM, sync or ring from Wave 1, or a wavefold, with its own amount.
+- **Sub oscillator** (beyond the CRAFTsynth): a sine, triangle or square one or two octaves down, before the filter.
 - **SPREAD**: unison detune in the first half; past the middle, chord shapes (major, minor, maj6, sus4, 5ths, 5th+oct,
   octave stacks).
 - **Filter**: 12 morphable types after Mega Synth (SVF, ladder, MS-20, TB-303, SEM, Steiner, Polivoks, formant,

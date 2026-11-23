@@ -55,9 +55,9 @@ static volatile uint32_t cr_clock_n, cr_clock_t0, cr_clock_ms;
 static volatile uint8_t cr_clock_seen;
 static volatile float cr_clock_bpm;
 
-enum { PG_OSC, PG_WAVES, PG_OSCB, PG_TUNE, PG_FILTER, PG_FEG, PG_AEG, PG_MEG, PG_LFO1, PG_LFO2, PG_MATRIX, PG_FX,
+enum { PG_OSC, PG_WAVES, PG_OSCB, PG_TUNE, PG_SUB, PG_FILTER, PG_FEG, PG_AEG, PG_MEG, PG_LFO1, PG_LFO2, PG_MATRIX, PG_FX,
        PG_OUT, PG_SPACE, PG_SPACE2, PG_COLOUR, PG_CRUSH, PG_ARP, PG_SEQ, PG_GLOB, PG_GLOB2, PG_GLOB3, PG_SAVE, PG_N };
-static const char *const CR_PG_NAME[PG_N] = {"OSC", "WAVES", "OSC B", "TUNE", "FILTER", "FILTER EG", "AMP EG",
+static const char *const CR_PG_NAME[PG_N] = {"OSC", "WAVES", "OSC B", "TUNE", "SUB", "FILTER", "FILTER EG", "AMP EG",
     "MOD EG", "LFO 1", "LFO 2", "MATRIX", "FX", "OUTPUT", "REVERB", "REVERB 2", "MOD FX", "CRUSH", "ARP", "SEQ",
     "MIDI", "KEYS", "SETUP", "SAVE"};
 /* the page's four knobs: a patch parameter, or one of the G_ values (globals and page controls) */
@@ -66,6 +66,7 @@ enum { G_NONE = 100, G_MSRC, G_MDST, G_MDEP, G_STEPS, G_MCH, G_MIN, G_CLOCK, G_B
 static const uint8_t CR_PAGE_P[PG_N][4] = {
     {CR_W1POS, CR_W2POS, CR_MIX, CR_OMAMT},   {CR_W1BANK, CR_W2BANK, CR_OMMODE, CR_SPREAD},
     {CR_BMODE, CR_BAMT, CR_W2POS, CR_TUNE},   {CR_TUNE, CR_FINE, CR_OCT, CR_GLIDE},
+    {CR_SUBLVL, CR_SUBOCT, CR_SUBWAVE, CR_MIX},
     {CR_CUT, CR_RES, CR_MORPH, CR_FTYPE},
     {CR_FA, CR_FD, CR_FS, CR_FR},             {CR_AA, CR_AD, CR_AS, CR_AR},
     {CR_MA, CR_MD, CR_MS, CR_MR},             {CR_L1RATE, CR_L1SHAPE, CR_L1MODE, CR_L1SYNC},
@@ -560,6 +561,8 @@ static uint32_t cr_step(uint32_t p, uint32_t v, int32_t d)
     case CR_K_FTYPE: return cr_band_val((uint32_t)lim32((int32_t)cr_band(v, 12) + d, 0, 11), 12);
     case CR_K_VMODE: return cr_band_val((uint32_t)lim32((int32_t)cr_band(v, 6) + d, 0, 5), 6);
     case CR_K_ERA: return cr_band_val((uint32_t)lim32((int32_t)cr_band(v, 6) + d, 0, 5), 6);
+    case CR_K_SUBOCT: return cr_band_val((uint32_t)lim32((int32_t)cr_band(v, 2) + d, 0, 1), 2);
+    case CR_K_SUBWAVE: return cr_band_val((uint32_t)lim32((int32_t)cr_band(v, 3) + d, 0, 2), 3);
     case CR_K_LRATE1:
         if (cr_p.p[CR_L1SYNC] >= 64u)
             return (uint32_t)lim32((int32_t)((v * 16u) >> 7) + d, 0, 15) * 8u + 4u;
@@ -691,7 +694,7 @@ static void cr_button(uint32_t b)                /* a press (LFO, SEL, ENV: a re
 {
     switch (b) {
     case B_HOME:                                 /* OSC -> WAVES -> OSC B -> TUNE */
-        cr_go(cr_page < PG_TUNE ? cr_page + 1u : PG_OSC);
+        cr_go(cr_page < PG_SUB ? cr_page + 1u : PG_OSC);
         break;
     case B_EDIT: cr_go(PG_FILTER); break;
     case B_ENV: cr_cycle(PG_FEG, PG_AEG, PG_MEG); break;
@@ -919,7 +922,7 @@ void cr_app_input(void)
         if (cr_latch) lit |= 1u << B_REC;
         if (cr_oct < 0) lit |= 1u << B_OCTDN;
         if (cr_oct > 0) lit |= 1u << B_OCTUP;
-        if (cr_page <= PG_TUNE) lit |= 1u << B_HOME;
+        if (cr_page <= PG_SUB) lit |= 1u << B_HOME;
         if (cr_page == PG_FILTER) lit |= 1u << B_EDIT;
         if (cr_page >= PG_FEG && cr_page <= PG_MEG) lit |= 1u << B_ENV;
         if (cr_page == PG_LFO1 || cr_page == PG_LFO2) lit |= 1u << B_LFO;
@@ -1151,6 +1154,34 @@ static void cr_draw_filter(int32_t x, int32_t y, int32_t w, int32_t h)
     }
 }
 
+/* the SUB page: two cycles of the sub's wave, as tall as its level (faint when it is off), its wave and octave named */
+static void cr_draw_sub(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    const cr_theme_t *t = cr_th();
+    uint32_t wv = cr_band(cr_p.p[CR_SUBWAVE], 3u), oct = cr_band(cr_p.p[CR_SUBOCT], 2u), i;
+    float lv = (float)cr_p.p[CR_SUBLVL] / 127.f, a = 0.12f + 0.88f * lv;
+    uint16_t col = lv > 0.f ? t->acc2 : t->line;
+    int32_t mid = y + 28 + (h - 28) / 2, half = (h - 32) / 2, py = mid;
+    char b[24];
+    sx_line(x, mid, x + w, mid, t->line);
+    for (i = 0; i <= (uint32_t)w; i++) {
+        float ph = (float)i / (float)w * 2.f, f = ph - (float)(int32_t)ph, v;
+        int32_t yy;
+        v = wv == 0u ? cr_sin_turn(f) : wv == 1u ? 1.f - 4.f * (f < 0.5f ? 0.5f - f : f - 0.5f) : (f < 0.5f ? 1.f : -1.f);
+        if (wv == 1u)
+            v = -v;
+        yy = mid - (int32_t)(v * a * (float)half);
+        sx_line(x + (int32_t)i, yy, x + (int32_t)i, mid, cr_mix(t->panel, col, 60u));
+        if (i)
+            sx_thick(x + (int32_t)i - 1, py, x + (int32_t)i, yy, col);
+        py = yy;
+    }
+    cr_cpy(b, CR_SUBWAVE_NAME[wv]);
+    sx_text(x + 2, y, &FONT_M, b, t->ink);
+    cr_cpy(b, CR_SUBOCT_NAME[oct]);
+    sx_text(x + w - 2 - text_w(&FONT_M, b), y, &FONT_M, b, lv > 0.f ? t->acc2 : t->soft);
+}
+
 /* where a parameter's value sits on its knob (0..1), and whether it is bipolar */
 static float cr_knob_pos(uint32_t p, int *bip)
 {
@@ -1245,6 +1276,8 @@ static void cr_screen(void)
             sx_rect(14, 46, text_w(&FONT_M, fn) + 8, 22, t->panel);
             sx_text(18, 48, &FONT_M, fn, t->ink);
         }
+        else if (cr_page == PG_SUB)
+            cr_draw_sub(12, 44, 216, 94);
         else if (cr_page == PG_MATRIX) {
             sx_center(4, 232, 48, &FONT_M, CR_SRC_NAME[cr_msrc], t->acc);
             sx_center(4, 232, 76, &FONT_S, "TO", t->soft);

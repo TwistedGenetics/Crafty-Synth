@@ -8,7 +8,7 @@ turn K2 40
 wait 1600
 shot p_oscb.ppm
 tap EDIT
-expect page 4
+expect page 5
 turn K4 7
 expect param.64 80
 wait 1600
@@ -16,19 +16,19 @@ shot p_filter.ppm
 tap FX
 tap FX
 tap FX
-expect page 13
+expect page 14
 turn K4 50
 expect param.68 50
 wait 1600
 shot p_reverb.ppm
 tap FX
 tap FX
-expect page 15
+expect page 16
 turn K1 60
 wait 1600
 shot p_modfx.ppm
 tap FX
-expect page 16
+expect page 17
 turn K1 1
 expect param.76 32
 wait 1600
@@ -40,11 +40,11 @@ key 0 up
 tap GLO
 tap GLO
 tap GLO
-expect page 21
+expect page 22
 wait 600
 shot p_cpu.ppm
 tap SAVE
-expect page 22
+expect page 23
 shot p_save.ppm
 tap SAVE
 expect preset 64

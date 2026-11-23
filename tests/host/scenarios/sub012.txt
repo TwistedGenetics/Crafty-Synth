@@ -1,0 +1,20 @@
+# Crafty Synth 0.12: the SUB page (HOME's fifth), its knobs, its screen
+wait 300
+tap HOME
+tap HOME
+tap HOME
+tap HOME
+expect page 4
+turn K1 90
+expect param.79 90
+turn K2 3
+expect param.80 96
+turn K3 4
+expect param.81 106
+wait 1600
+shot p_sub.ppm
+turn K3 -1
+wait 1600
+shot p_sub_tri.ppm
+tap HOME
+expect page 0

@@ -29,7 +29,7 @@ the user slots (U1-1 … U16-8), 16383 (0x3FFF) the working patch.
 | bytes | |
 |---|---|
 | 0–11 | name, ASCII, 0-terminated |
-| 12–107 | the parameters, 0–127, in `src/core/cr_patch.h`'s order (79 in use) |
+| 12–107 | the parameters, 0–127, in `src/core/cr_patch.h`'s order (82 in use) |
 | 108 | pattern length (0–16) |
 | 109 | magic 0xC5 |
 | 110 | version 2 |
