@@ -7,6 +7,7 @@
 #include "cr_patch.h"
 #include "cr_keys.h"
 #include "cr_mpc_lists.h"
+#include "cr_tables.h"
 
 static void js(const char *s)
 {
@@ -36,7 +37,8 @@ static const char *const SECTIONS[][9] = {
     {"DELAY", "DMIX", "DTIME", "DFB", "DSYNC", 0},
     {"MOD FX", "CHMIX", "CHRATE", "PHMIX", "PHRATE", 0},
     {"CRUSH", "ERA", "CRUSH", "OTT", 0},
-    {"PRESET", "@pbank", "@pslot", "@preset", 0},
+    {"PRESET", "@pbank", "@pslot", "@preset", "@random", "@rkeep", 0},
+    {"TABLE FILES", "@table1", "@table2", 0},
     {"ARP-SEQ", "ARP", "TEMPO", "ARPRATE", 0},
 };
 
@@ -95,6 +97,14 @@ int main(void)
             printf(", \"min\": 0, \"max\": 127, \"default\": %u, \"dynamic_display\": true", CR_P[i].def);
         printf("}");
     }
+    /* 0.13: the wavetable files (numbers in TableIndex.txt, 0 = the bank, shown by name), Random Patch */
+    printf(",\n  {\"key\": \"table1\", \"name\": \"TABLE 1\", \"min\": 0, \"max\": %u, \"default\": 0, "
+           "\"display\": \"int\", \"dynamic_display\": true, \"nudge_pct\": 1}", CR_TABLES_MAX);
+    printf(",\n  {\"key\": \"table2\", \"name\": \"TABLE 2\", \"min\": 0, \"max\": %u, \"default\": 0, "
+           "\"display\": \"int\", \"dynamic_display\": true, \"nudge_pct\": 1}", CR_TABLES_MAX);
+    printf(",\n  {\"key\": \"random\", \"name\": \"RANDOM\", \"min\": 0, \"max\": 1, \"default\": 0, \"type\": \"trigger\", "
+           "\"momentary\": true}");
+    printf(",\n  {\"key\": \"rkeep\", \"name\": \"RND TABLES\", \"options\": [\"NEW\", \"KEEP\"], \"default\": 0}");
     printf("\n ],\n \"sections\": [\n");
     for (s = 0; s < sizeof SECTIONS / sizeof SECTIONS[0]; s++) {
         printf("%s  {\"label\": ", s ? ",\n" : "");

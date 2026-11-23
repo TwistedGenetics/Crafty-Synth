@@ -55,6 +55,107 @@ void CraftyUserArea::save()
         st->user_dirty = 0;
 }
 
+// ------------------------------------------------------------------------------------ the wavetable files ---
+CraftyTableFiles::CraftyTableFiles() : t(std::make_unique<cr_tables_t>()) { cr_tables_init(t.get()); }
+juce::File CraftyTableFiles::folder() { return CraftyUserArea::file().getSiblingFile("Wavetables"); }
+void CraftyTableFiles::scan(bool force)
+{
+    const auto now = juce::Time::getMillisecondCounter();
+    if (loaded && !force && now - lastScan < 2000)
+        return;
+    lastScan = now;
+    auto dir = folder();
+    dir.createDirectory();
+    auto index = dir.getSiblingFile("TableIndex.txt");
+    if (!loaded) {
+        juce::MemoryBlock mb;
+        if (index.existsAsFile() && index.loadFileAsData(mb))
+            cr_tables_load(t.get(), static_cast<const char *>(mb.getData()), (uint32_t)mb.getSize());
+        loaded = true;
+    }
+    cr_tables_begin(t.get());
+    for (const auto &e : juce::RangedDirectoryIterator(dir, true, "*.wav;*.WAV", juce::File::findFiles)) {
+        auto f = e.getFile();
+        if (f.getFileName().startsWithChar('.') || f.isHidden())
+            continue;
+        auto rel = f.getRelativePathFrom(dir).replaceCharacter('\\', '/');
+        cr_tables_seen(t.get(), rel.toRawUTF8());
+    }
+    cr_tables_done(t.get());
+    char buf[4096];
+    uint32_t n;
+    while ((n = cr_tables_new_lines(t.get(), buf, sizeof buf)) > 0)
+        index.appendData(buf, n);
+}
+juce::var CraftyTableFiles::list()
+{
+    juce::Array<juce::var> a;
+    for (uint32_t i = 0; i < t->nsorted; i++)
+        a.add(juce::String::fromUTF8(cr_tables_path(t.get(), cr_tables_at(t.get(), i))));
+    return a;
+}
+
+static uint32_t memRead(void *ctx, uint32_t off, void *buf, uint32_t n)
+{
+    auto *mb = static_cast<juce::MemoryBlock *>(ctx);
+    if (off >= mb->getSize())
+        return 0;
+    n = (uint32_t)juce::jmin<size_t>(n, mb->getSize() - off);
+    std::memcpy(buf, static_cast<const uint8_t *>(mb->getData()) + off, n);
+    return n;
+}
+
+bool CraftyProcessor::setTableFile(int k, const juce::String &path)
+{
+    k &= 1;
+    bool ok = false;
+    if (path.isNotEmpty()) {
+        juce::MemoryBlock mb;
+        auto f = CraftyTableFiles::folder().getChildFile(path);
+        cr_wav_t w;
+        auto work = std::make_unique<cr_wav_work_t>();
+        int16_t waves[5][CR_WT_N];
+        if (f.existsAsFile() && f.loadFileAsData(mb) && cr_wav_open(&w, memRead, &mb, (uint32_t)mb.getSize()) &&
+            cr_wav_bank(&w, nullptr, waves, work.get())) {
+            const juce::ScopedLock sl(lock);
+            std::memcpy(tableWaves[(size_t)k].data(), waves, sizeof waves);
+            cr_inst_file_table(inst.get(), (uint32_t)k, (const int16_t (*)[CR_WT_N])tableWaves[(size_t)k].data());
+            ok = true;
+        }
+    }
+    if (!ok) {
+        const juce::ScopedLock sl(lock);
+        cr_inst_file_table(inst.get(), (uint32_t)k, nullptr);
+    }
+    tablePath[(size_t)k] = path;                    // kept even when missing: the project finds it once it's back
+    return ok;
+}
+void CraftyProcessor::sendTables()
+{
+    if (!toEditorTables)
+        return;
+    auto *o = new juce::DynamicObject();
+    o->setProperty("files", tableFiles->list());
+    juce::Array<juce::var> sel;
+    for (int k = 0; k < 2; k++)
+        sel.add(tablePath[(size_t)k]);
+    o->setProperty("sel", sel);
+    o->setProperty("folder", CraftyTableFiles::folder().getFullPathName());
+    toEditorTables(juce::var(o));
+}
+void CraftyProcessor::tablesFromEditor(const juce::var &v)
+{
+    auto *o = v.getDynamicObject();
+    if (!o)
+        return;
+    if (o->hasProperty("set")) {                    // {set: k, path: "Basses/Growl.wav"} ("" = the bank)
+        const int k = (int)o->getProperty("set");
+        setTableFile(k, o->getProperty("path").toString());
+    } else
+        tableFiles->scan(o->hasProperty("rescan"));  // {get: 1} or {rescan: 1}
+    sendTables();
+}
+
 // --------------------------------------------------------------------------------------------- parameters ---
 static juce::String valueText(int id, int v)
 {
@@ -366,6 +467,15 @@ void CraftyProcessor::getStateInformation(juce::MemoryBlock &dest)
     const int asp = juce::roundToInt(layoutAspect * 1000.0);
     const uint8_t a2[2] = {(uint8_t)(asp & 0xFF), (uint8_t)(asp >> 8)};
     dest.append(a2, sizeof a2);
+    // 0.13: the wavetable files ("TF", then each wave's path: 2 bytes of length, UTF-8)
+    dest.append("TF", 2);
+    for (int k = 0; k < 2; k++) {
+        const auto *u = tablePath[(size_t)k].toRawUTF8();
+        const auto n = (uint16_t)juce::jmin<size_t>(std::strlen(u), 1024);
+        const uint8_t l[2] = {(uint8_t)(n & 0xFF), (uint8_t)(n >> 8)};
+        dest.append(l, 2);
+        dest.append(u, n);
+    }
 }
 void CraftyProcessor::setStateInformation(const void *data, int size)
 {
@@ -397,6 +507,22 @@ void CraftyProcessor::setStateInformation(const void *data, int size)
                 layoutAspect = asp / 1000.0;
         }
     }
+    juce::String files[2];
+    int at = 8 + (int)CR_PATCH_BYTES + (int)sizeof(cr_globals_t) + 8;
+    if (size >= at + 2 && d[at] == 'T' && d[at + 1] == 'F') {   /* 0.13: the wavetable files */
+        at += 2;
+        for (int k = 0; k < 2 && at + 2 <= size; k++) {
+            const int n = d[at] | d[at + 1] << 8;
+            at += 2;
+            if (at + n > size)
+                break;
+            files[k] = juce::String::fromUTF8((const char *)d + at, n);
+            at += n;
+        }
+    }
+    for (int k = 0; k < 2; k++)
+        if (files[k] != tablePath[(size_t)k])
+            setTableFile(k, files[k]);
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())
         syncParamsFromEngine();
     else

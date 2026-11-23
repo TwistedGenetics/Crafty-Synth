@@ -217,6 +217,36 @@ int main(void)
                (double)cr_arp_bpm(&ap));
     }
 
+
+    /* 0.13: deferred bank builds (the Tracker's way) and a host's wavetable file in place of a bank */
+    {
+        static int16_t fw[5][CR_WT_N];
+        uint32_t k, i;
+        float lr[256];
+        for (k = 0; k < 5u; k++)
+            for (i = 0; i < CR_WT_N; i++)
+                fw[k][i] = (int16_t)(i < 128u ? 20000 : -20000);
+        cr_inst_load(a, 0);
+        a->defer_tables = 1;
+        cr_inst_param(a, CR_W1BANK, cr_bank_val(3, 0));
+        CHECK(a->tb[0] != 3u && cr_inst_tables_pending(a), "deferred: bank 4 built at once (%u)", a->tb[0]);
+        cr_inst_render(a, lr, 128);
+        CHECK(a->tb[0] != 3u && cr_inst_tables_pending(a), "deferred: render built bank 4");
+        cr_inst_tables(a);
+        CHECK(a->tb[0] == 3u && !cr_inst_tables_pending(a), "deferred: cr_inst_tables didn't build bank 4");
+        cr_inst_file_table(a, 0, (const int16_t (*)[CR_WT_N])fw);
+        CHECK(a->tb[0] == 0xFEu && a->tab[0].w[0][0][10] > 10000 && a->tab[0].w[0][0][200] < -10000, "the file isn't playing");
+        cr_inst_param(a, CR_W1BANK, cr_bank_val(5, 0));
+        cr_inst_tables(a);
+        CHECK(a->tb[0] == 0xFEu, "a bank change replaced the file");
+        cr_inst_file_table(a, 0, 0);
+        CHECK(a->tb[0] == 5u, "back from the file: bank %u, not 6", a->tb[0]);
+        a->defer_tables = 0;
+        cr_inst_param(a, CR_W2BANK, cr_bank_val(CR_BANK_NOISE, 1));
+        CHECK(a->tb[1] == CR_BANK_NOISE && !cr_inst_tables_pending(a), "not deferred: noise bank not built at once");
+        printf("inst: deferred bank builds and a wavetable file in place of a bank\n");
+    }
+
     /* the arp-seq locked to the host: 120 BPM, 1/16 steps, the transport running from beat 0 */
     {
         uint32_t blk, last = 0xFFFF, steps = 0, first = 0;

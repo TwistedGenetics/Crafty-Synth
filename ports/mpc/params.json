@@ -85,7 +85,11 @@
   {"key": "ott", "name": "OTT", "min": 0, "max": 127, "default": 0, "dynamic_display": true},
   {"key": "sublvl", "name": "SUB LVL", "min": 0, "max": 127, "default": 0, "dynamic_display": true},
   {"key": "suboct", "name": "SUB OCT", "options": ["-1 OCT", "-2 OCT"], "default": 0},
-  {"key": "subwave", "name": "SUB WAVE", "options": ["SINE", "TRIANGLE", "SQUARE"], "default": 0}
+  {"key": "subwave", "name": "SUB WAVE", "options": ["SINE", "TRIANGLE", "SQUARE"], "default": 0},
+  {"key": "table1", "name": "TABLE 1", "min": 0, "max": 4000, "default": 0, "display": "int", "dynamic_display": true, "nudge_pct": 1},
+  {"key": "table2", "name": "TABLE 2", "min": 0, "max": 4000, "default": 0, "display": "int", "dynamic_display": true, "nudge_pct": 1},
+  {"key": "random", "name": "RANDOM", "min": 0, "max": 1, "default": 0, "type": "trigger", "momentary": true},
+  {"key": "rkeep", "name": "RND TABLES", "options": ["NEW", "KEEP"], "default": 0}
  ],
  "sections": [
   {"label": "OSC A", "keys": ["w1pos", "w1bank", "omamt", "ommode", "mix", "spread", "glide", "oct"]},
@@ -103,7 +107,8 @@
   {"label": "DELAY", "keys": ["dmix", "dtime", "dfb", "dsync"]},
   {"label": "MOD FX", "keys": ["chmix", "chrate", "phmix", "phrate"]},
   {"label": "CRUSH", "keys": ["era", "crush", "ott"]},
-  {"label": "PRESET", "keys": ["pbank", "pslot", "preset"]},
+  {"label": "PRESET", "keys": ["pbank", "pslot", "preset", "random", "rkeep"]},
+  {"label": "TABLE FILES", "keys": ["table1", "table2"]},
   {"label": "ARP-SEQ", "keys": ["arp", "tempo", "arprate"]}
  ]
 }

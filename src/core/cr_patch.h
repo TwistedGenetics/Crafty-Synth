@@ -124,3 +124,13 @@ int32_t cr_semi_of(uint32_t v);                        /* CR_TUNE -> -48..48 sem
 uint32_t cr_spread_shape(uint32_t v);                  /* CR_SPREAD: 0 unison (below 64), 1..9 the chords */
 extern const char *const CR_SHAPE_NAME[10];
 int cr_dest_ok(uint32_t src, uint32_t dst);            /* LFOs and the mod envelope don't modulate themselves */
+
+/* 0.13: Random Patch, the same on every version (and the Twisted Tracker's CRAFTY). The host picks the preset
+ * (cr_rand_slot: never an empty user slot, saved() says which hold a patch, or 0: all), loads it into p, then
+ * cr_patch_random varies it. CR_RAND_KEEP_TABLES keeps cur's banks (cur may be 0: the preset's), else both waves
+ * get a random factory bank. *s is the generator's state (any value; 0 is fine). */
+#define CR_RAND_KEEP_TABLES 1u
+uint32_t cr_rand(uint32_t *s);
+uint32_t cr_rand_slot(uint32_t *s, int (*saved)(void *ctx, uint32_t slot), void *ctx);
+void cr_patch_random(cr_patch_t *p, const cr_patch_t *cur, uint32_t *s, uint32_t flags);
+int cr_rand_keeps(uint32_t id);                        /* a value Random Patch leaves alone */

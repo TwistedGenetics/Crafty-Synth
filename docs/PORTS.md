@@ -41,6 +41,14 @@ plugin the way they work on an FM-1.
 - **MIDI**: notes, the CRAFTsynth's CC chart (the same CCs as the FM-1), pitch bend, mod wheel, aftertouch, sustain,
   program change. The project saves the patch you're playing (and which preset it came from).
 - Any sample rate: the engine runs at 44.1 kHz like the FM-1 and is resampled to the DAW's rate.
+- **Wavetable files** (0.13, as the Twisted Tracker's CRAFTY): put WAVs (Serum and Vital tables, single cycles,
+  sub-folders too) in `~/Library/Application Support/Twisted Genetics/Crafty Synth/Wavetables`. **TABLE FILE** under
+  each oscillator plays one in place of its bank ("(the bank)" to go back); the list re-reads the folder when you open
+  it. Every file gets a number for good in `TableIndex.txt` next to the folder, the Tracker's and the MPC's format:
+  copy both between them and the numbers match. The project keeps the file by its path. A file plays as the five
+  waves the importer picks (evenly through the table); the matrix can't move a file as it moves a bank.
+- **RANDOM** picks a preset and varies it (the FM-1's rules, docs/MANUAL.md); half the time each oscillator also gets
+  one of your wavetable files. Shift-click keeps the banks and files you have.
 
 ## MPC
 
@@ -72,7 +80,7 @@ A project saved on one MPC opens on any other.
 | MOD EG / LFO 1 / LFO 2 | the mod envelope · LFO 1 · LFO 2 (rate, shape, mode, sync) |
 | MATRIX | one destination and depth per source (LFO 1 - NOTE, then VELO - AFTTCH) |
 | REVERB / DELAY / MOD FX | the Horizon reverb (mode, size, decay, mix, warp, density, mod) · the delay · chorus, phaser |
-| CRUSH / PRESET / ARP-SEQ | era, crush, OTT · bank, slot, preset · arp, tempo, rate |
+| CRUSH / PRESET / TABLE FILES / ARP-SEQ | era, crush, OTT · bank, slot, preset, RANDOM, RND TABLES · TABLE 1, TABLE 2 · arp, tempo, rate |
 
 - **Presets**: BANK (1-8 factory, U1-U16 user) and SLOT step one at a time; PRESET runs through all 192, and MPC's
   own PRESET menu lists them by name.
@@ -80,6 +88,12 @@ A project saved on one MPC opens on any other.
   filter types, reverb modes, matrix destinations) open as pop-ups.
 - **Your user presets and wavetables**: copy `Crafty Synth.user` from your Mac (path above) into the plugin's `data`
   folder on the MPC (`VST2 Plugins/Twisted Genetics - VST - Crafty Synth/data/`).
+- **Wavetable files** (0.13): WAVs in `data/Wavetables` (sub-folders too) are numbered in `data/TableIndex.txt`;
+  **TABLE 1** / **TABLE 2** play one by its number in place of OSC A's / OSC B's bank (0: the bank), shown by name.
+  New files get their numbers in name order when the plugin loads. Copy `Wavetables` and `TableIndex.txt` from the Mac
+  or the Tracker to keep the same numbers.
+- **RANDOM** (a button on the PRESET page) picks a preset and varies it, as the FM-1's; **RND TABLES** = KEEP leaves
+  the banks and files alone, NEW gives each oscillator a random factory bank and, half the time, one of your files.
 - **The arp-seq follows the MPC's tempo and transport.** The MPC project keeps the patch.
 
 ## How it's built
@@ -90,3 +104,9 @@ WebAssembly preview, the AU / VST3 and the MPC plugin all use them. `ports/plugi
 `ports/mpc` the MPC toolkit's engine interface, with its parameters and skin made from the engine's own tables
 (`make_port.py`); Akai's SDK (`external/mpc-plugin-builder-sdk`, `legacy_convert.py` and `validate.py`) turns its two
 builds into the official package. CI builds the FM-1 first, then the plugins (CLAUDE.md).
+
+0.13 shares three more pieces with every version and the Twisted Tracker's CRAFTY: `src/host/cr_wav.c` (WAV files to
+user banks or wavetable files; the editor runs it through WebAssembly), `src/host/cr_tables.c` (the numbered
+wavetable files, `TableIndex.txt`) and `cr_patch_random()` in `src/core/cr_patch.c` (RANDOM). `cr_inst` can also
+defer bank builds out of the audio thread (`defer_tables`, `cr_inst_tables()`: the Tracker needs it) and play a
+host's wavetable file in place of a bank (`cr_inst_file_table()`).

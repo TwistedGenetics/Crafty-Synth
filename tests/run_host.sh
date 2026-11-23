@@ -26,11 +26,17 @@ echo 'int main(void){return 0;}' > build/host/san.c
 $CC $SAN build/host/san.c -o build/host/san 2>/dev/null || SAN=""
 # shellcheck disable=SC2086
 $CC $W $SAN -Isrc/host tests/host/inst_test.c src/host/cr_inst.c src/host/cr_proto.c $CORE -lm -o build/host/inst_test
+# the shared WAV importer (against the editor's algorithm in numpy) and Random Patch
+# shellcheck disable=SC2086
+$CC $W $SAN -Isrc/host tests/host/wav_test.c src/host/cr_wav.c src/host/cr_tables.c $CORE -lm -o build/host/wav_test
+build/host/wav_test
+mkdir -p build/host/wav
+python3 tests/host/wav_ref.py build/host/wav build/host/wav_test
 # the MPC plugin's engine (ports/mpc) through the toolkit's engine interface
 python3 tools/gen_presets.py --keys build/gen/cr_keys.h
 # shellcheck disable=SC2086
 $CC $W $SAN -Wno-unused-parameter -Isrc/host -Iports/mpc -Iexternal/mpc-vst-plugins/wrapper tests/host/mpc_test.c \
-    ports/mpc/cr_mpc.c src/host/cr_inst.c $CORE -lm -o build/host/mpc_test
+    ports/mpc/cr_mpc.c src/host/cr_inst.c src/host/cr_wav.c src/host/cr_tables.c $CORE -lm -o build/host/mpc_test
 build/host/mpc_test build/host
 build/host/inst_test
 # shellcheck disable=SC2086

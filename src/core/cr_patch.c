@@ -299,3 +299,108 @@ int cr_dest_ok(uint32_t src, uint32_t dst)
         return !(dst >= CR_D_MA && dst <= CR_D_MR) && dst != CR_D_MEGDEP;
     return dst != CR_D_NOTEDEP + (src - CR_S_NOTE);   /* no source modulates its own depth */
 }
+
+/* ---- 0.13: Random Patch (the Twisted Tracker's rules, shared by every version) ----
+ * A random preset (never an empty user slot), then: each continuous value pushed from it by up to a quarter of its
+ * range (one in five by up to 60%), about a third of the stepped ones changed, the banks a random factory bank
+ * (or kept), and level, octave, glide, the amp envelope's amount, the arp and the delay / reverb tails left alone,
+ * so it stays playable and in the mix. A matrix slot never gets a destination that holds the amp open or moves a
+ * bank. */
+uint32_t cr_rand(uint32_t *s)
+{
+    uint32_t x = *s ? *s : 0x9E3779B9u;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *s = x;
+    return x;
+}
+static float rnd01(uint32_t *s) { return (float)(cr_rand(s) >> 8) * (1.f / 16777216.f); }
+
+uint32_t cr_rand_slot(uint32_t *s, int (*saved)(void *ctx, uint32_t slot), void *ctx)
+{
+    uint32_t t, slot = 0;
+    for (t = 0; t < 24u; t++) {
+        slot = cr_rand(s) % CR_NPRESET;
+        if (slot < CR_NFACTORY || !saved || saved(ctx, slot))
+            return slot;
+    }
+    return cr_rand(s) % CR_NFACTORY;
+}
+
+/* a stepped value's choices (0: continuous), and choice i's patch value: the Tracker's CRAFTY steps */
+static uint32_t rnd_choices(uint32_t id)
+{
+    switch (CR_P[id].kind) {
+    case CR_K_BANK: return 8u;                  /* the factory banks both waves have */
+    case CR_K_OMMODE: return CR_NOM;
+    case CR_K_OCT: return 7u;
+    case CR_K_LSHAPE: return 5u;
+    case CR_K_LMODE: return 3u;
+    case CR_K_ONOFF: return 2u;
+    case CR_K_ARPRATE: return 6u;
+    case CR_K_DEST: return CR_ND;
+    case CR_K_BMODE: return 5u;
+    case CR_K_FTYPE: return 12u;
+    case CR_K_VMODE: return 6u;
+    case CR_K_ERA: return 6u;
+    case CR_K_SUBOCT: return 2u;
+    case CR_K_SUBWAVE: return 3u;
+    default: return 0u;
+    }
+}
+static uint32_t rnd_choice_val(uint32_t id, uint32_t i)
+{
+    switch (CR_P[id].kind) {
+    case CR_K_BANK: return cr_bank_val(i, id == CR_W2BANK);
+    case CR_K_OMMODE: return i * 8u + 4u;
+    case CR_K_LSHAPE: return (i * 127u) / 4u;
+    case CR_K_LMODE: return i == 0u ? 20u : i == 1u ? 63u : 105u;
+    case CR_K_ONOFF: return i ? 127u : 0u;
+    case CR_K_DEST: return i;
+    default: return cr_band_val(i, rnd_choices(id));
+    }
+}
+int cr_rand_keeps(uint32_t id)
+{
+    switch (id) {
+    case CR_VOL: case CR_OCT: case CR_GLIDE: case CR_AEGAMT: case CR_DTIME: case CR_DFB:
+    case CR_ARP: case CR_TEMPO: case CR_ARPRATE: case CR_VMODE: case CR_VSIZE: case CR_VDECAY:
+        return 1;
+    default:
+        return 0;
+    }
+}
+static int rnd_dest_bad(uint32_t src, uint32_t d)
+{
+    return (d >= CR_D_AEGAMT && d <= CR_D_VOL) || d == CR_D_W1BANK || d == CR_D_W2BANK || !cr_dest_ok(src, d);
+}
+void cr_patch_random(cr_patch_t *p, const cr_patch_t *cur, uint32_t *s, uint32_t flags)
+{
+    uint32_t id;
+    for (id = 0; id < CR_NP; id++) {
+        uint32_t n = rnd_choices(id);
+        if (CR_P[id].kind == CR_K_BANK) {
+            if ((flags & CR_RAND_KEEP_TABLES) && cur)
+                p->p[id] = cur->p[id];
+            else if (!(flags & CR_RAND_KEEP_TABLES))
+                p->p[id] = (uint8_t)rnd_choice_val(id, cr_rand(s) % 8u);
+            continue;
+        }
+        if (cr_rand_keeps(id))
+            continue;
+        if (n) {                                /* two in three keep the preset's choice */
+            uint32_t v;
+            if (rnd01(s) > 0.33f)
+                continue;
+            v = rnd_choice_val(id, cr_rand(s) % n);
+            if (CR_P[id].kind == CR_K_DEST && rnd_dest_bad(id - CR_DST0, v))
+                continue;
+            p->p[id] = (uint8_t)v;
+        } else {                                /* an offset from the preset: mostly small, now and then bigger */
+            float r = rnd01(s) * 2.f - 1.f, span = (rnd01(s) < 0.2f ? 0.6f : 0.25f) * 127.f, o = r * span;
+            int32_t v = (int32_t)p->p[id] + (int32_t)(o < 0.f ? o - 0.5f : o + 0.5f);
+            p->p[id] = (uint8_t)(v < 0 ? 0 : v > 127 ? 127 : v);
+        }
+    }
+}

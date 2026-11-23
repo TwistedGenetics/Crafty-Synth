@@ -23,7 +23,11 @@ typedef struct cr_inst {
     cr_patch_t p;                       /* the working patch: what sounds */
     cr_globals_t g;                     /* bend range, velocity, breath (the FM-1's GLO pages) */
     cr_wtbank_t tab[2];                 /* Wave 1's and Wave 2's bank, ready to play */
-    uint8_t tb[2];                      /* which banks those are (0xFF: none yet) */
+    uint8_t tb[2];                      /* which banks those are (0xFF: none yet, 0xFE: a wavetable file) */
+    uint8_t defer_tables;               /* 1: render() leaves a bank change for cr_inst_tables() (see below) */
+    volatile uint8_t tb_pending;        /* a bank is waiting to be built (defer_tables only) */
+    const int16_t (*file[2])[CR_WT_N];  /* a host's wavetable file in place of a wave's bank (0: the bank) */
+    uint8_t file_gen[2], tb_gen[2];     /*   ... which file (built when tb_gen differs) */
     const uint8_t *user;                /* the user area (CR_USER_BYTES, src/core/cr_user.h), or 0: no user presets / banks */
     uint16_t cur;                       /* the preset last loaded (0..191) */
     uint8_t dirty;                      /* the working patch differs from it */
@@ -57,6 +61,16 @@ void cr_inst_all_off(cr_inst_t *in);
  * host's tempo, or the patch's TEMPO when the host gives none. */
 void cr_inst_transport(cr_inst_t *in, double ppq, float bpm, int playing);
 void cr_inst_render(cr_inst_t *in, float *lr, uint32_t n);    /* n <= 128 frames, interleaved L R, about -1..1 */
+/* Building a bank takes a few milliseconds. A host whose audio can't wait that long (the Polyend Tracker) sets
+ * defer_tables = 1 after cr_inst_init(): then every bank change after the first (knob, CC, program change, the
+ * matrix) keeps the old bank playing and cr_inst_tables_pending() says so, and the host's main loop calls
+ * cr_inst_tables() to build it. With 0 (the FM-1's way, the plugins') they are built at once, as before. */
+int cr_inst_tables_pending(const cr_inst_t *in);
+void cr_inst_tables(cr_inst_t *in);
+/* A wavetable file (5 x 256 waves the host keeps, e.g. from cr_wav_import()) on wave k (0, 1) in place of its bank,
+ * or 0: the bank again. The matrix can't move a file. Built now: call it where a bank may be built (not the audio
+ * thread when defer_tables is set). */
+void cr_inst_file_table(cr_inst_t *in, uint32_t k, const int16_t (*base)[CR_WT_N]);
 /* a parameter changed from inside (MIDI CC): its id + 1, or 0 when none is left. A whole new patch (program change)
  * is reported once by cr_inst_take_patch_changed(). */
 uint32_t cr_inst_take_changed(cr_inst_t *in);

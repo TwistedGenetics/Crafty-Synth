@@ -3,12 +3,21 @@
  * interface (external/mpc-vst-plugins/wrapper/engine.h; its VST2 wrapper is what MPC loads). Parameter 0 is the
  * preset (also MPC's PRESET menu), then every patch value in the engine's order (params.json, gen_params.c).
  * User presets and wavetables come from "Crafty Synth.user" in the plugin's data folder: the plugin's file
- * (Mac) or the FM-1's user area, byte for byte. Copyright (C) 2026 Jamie (TwistedGenetics). */
+ * (Mac) or the FM-1's user area, byte for byte. 0.13: WAVs under its Wavetables folder are numbered in
+ * TableIndex.txt (src/host/cr_tables.c, the Twisted Tracker's way) and "table1" / "table2" play one in place of a
+ * wave's bank; "random" is Random Patch (src/core cr_patch_random). Copyright (C) 2026 Jamie (TwistedGenetics). */
+#define _DEFAULT_SOURCE                         /* strdup, strcasecmp, dirent */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <time.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #include "engine.h"
 #include "cr_inst.h"
+#include "cr_tables.h"
+#include "cr_wav.h"
 #include "cr_keys.h"
 #include "cr_mpc_lists.h"
 
@@ -22,7 +31,123 @@ typedef struct {
     uint8_t user[CR_USER_BYTES];
     float buf[2 * CR_INST_FRAMES];
     int report;                                 /* after a new patch: the keys still to report (mpc_engine_changed) */
+    uint32_t file[2];                           /* the wavetable files the waves play (numbers, 0: the bank) */
+    char fpath[2][CR_TABLES_PATH];              /*   ... their paths (kept when missing: the project finds them later) */
+    int16_t waves[2][5][CR_WT_N];
+    int rkeep;                                  /* RANDOM keeps the tables */
+    uint32_t seed;
 } mpc_t;
+
+/* ---- the wavetable files: one numbered list for every instance (the data folder's Wavetables) ---- */
+static cr_tables_t TABS;
+static char TDIR[1024];
+static int tabs_ready;
+static int tb_namecmp(const void *a, const void *b) { return strcasecmp(*(char *const *)a, *(char *const *)b); }
+static void tabs_walk(const char *rel, int depth)
+{
+    char path[1400], sub[CR_TABLES_PATH];
+    char *names[512];
+    int n = 0, i;
+    DIR *d;
+    struct dirent *e;
+    snprintf(path, sizeof path, rel[0] ? "%s/%s" : "%s", TDIR, rel);
+    if (depth > 8 || !(d = opendir(path)))
+        return;
+    while ((e = readdir(d)) != 0 && n < 512)
+        if (e->d_name[0] != '.')
+            names[n++] = strdup(e->d_name);
+    closedir(d);
+    qsort(names, (size_t)n, sizeof names[0], tb_namecmp);  /* new files get their numbers in name order */
+    for (i = 0; i < n; i++) {
+        struct stat st;
+        size_t l = strlen(names[i]);
+        snprintf(sub, sizeof sub, rel[0] ? "%s/%s" : "%s%s", rel, names[i]);
+        snprintf(path, sizeof path, "%s/%s", TDIR, sub);
+        if (!stat(path, &st) && S_ISDIR(st.st_mode))
+            tabs_walk(sub, depth + 1);
+        else if (l > 4 && !strcasecmp(names[i] + l - 4, ".wav"))
+            cr_tables_seen(&TABS, sub);
+        free(names[i]);
+    }
+}
+static void tabs_scan(const char *dir)
+{
+    char index[1100], buf[4096];
+    FILE *f;
+    uint32_t n;
+    if (!dir)
+        return;
+    snprintf(TDIR, sizeof TDIR, "%s/Wavetables", dir);
+    mkdir(TDIR, 0755);
+    snprintf(index, sizeof index, "%s/TableIndex.txt", dir);
+    if (!tabs_ready) {
+        cr_tables_init(&TABS);
+        if ((f = fopen(index, "rb")) != 0) {
+            char *t = malloc(1u << 20);
+            if (t) {
+                n = (uint32_t)fread(t, 1, 1u << 20, f);
+                cr_tables_load(&TABS, t, n);
+                free(t);
+            }
+            fclose(f);
+        }
+        tabs_ready = 1;
+    }
+    cr_tables_begin(&TABS);
+    tabs_walk("", 0);
+    cr_tables_done(&TABS);
+    if ((n = cr_tables_new_lines(&TABS, buf, sizeof buf)) > 0 && (f = fopen(index, "ab")) != 0) {
+        do
+            fwrite(buf, 1, n, f);
+        while ((n = cr_tables_new_lines(&TABS, buf, sizeof buf)) > 0);
+        fclose(f);
+    }
+}
+static uint32_t file_read(void *ctx, uint32_t off, void *buf, uint32_t n)
+{
+    FILE *f = ctx;
+    if (fseek(f, (long)off, SEEK_SET))
+        return 0;
+    return (uint32_t)fread(buf, 1, n, f);
+}
+/* wave k plays file id (0: its bank); the path is kept (a missing file plays the bank) */
+static void set_file(mpc_t *m, int k, uint32_t id)
+{
+    static cr_wav_work_t work;
+    char path[1400];
+    const char *rel = cr_tables_path(&TABS, id);
+    FILE *f;
+    cr_wav_t w;
+    int ok = 0;
+    m->file[k] = id;                            /* kept as set (a number not on this MPC shows MISSING) */
+    snprintf(m->fpath[k], sizeof m->fpath[k], "%s", rel ? rel : "");
+    if (rel && cr_tables_present(&TABS, id)) {
+        snprintf(path, sizeof path, "%s/%s", TDIR, rel);
+        if ((f = fopen(path, "rb")) != 0) {
+            fseek(f, 0, SEEK_END);
+            ok = cr_wav_open(&w, file_read, f, (uint32_t)ftell(f)) && cr_wav_bank(&w, 0, m->waves[k], &work);
+            fclose(f);
+        }
+    }
+    cr_inst_file_table(&m->in, (uint32_t)k, ok ? (const int16_t (*)[CR_WT_N])m->waves[k] : 0);
+}
+static int saved_slot(void *ctx, uint32_t slot) { return cr_user_saved(((mpc_t *)ctx)->user, slot); }
+static void random_patch(mpc_t *m)
+{
+    cr_patch_t t;
+    uint32_t k;
+    if (!m->seed)
+        m->seed = (uint32_t)time(0) * 2654435761u + (uint32_t)(uintptr_t)m;
+    (void)cr_preset_get(m->user, cr_rand_slot(&m->seed, saved_slot, m), &t);
+    cr_patch_random(&t, &m->in.p, &m->seed, m->rkeep ? CR_RAND_KEEP_TABLES : 0u);
+    cr_inst_all_off(&m->in);
+    cr_inst_use(&m->in, &t);
+    m->in.dirty = 1;
+    if (!m->rkeep)                              /* as the Tracker: half the time one of your files, else the bank */
+        for (k = 0; k < 2u; k++)
+            set_file(m, (int)k, cr_rand(&m->seed) % 2u ? cr_tables_random(&TABS, &m->seed) : 0u);
+    m->report = 3 + CR_NP + 2;                  /* every value moved */
+}
 
 static void tables(void)
 {
@@ -69,6 +194,7 @@ static void *create(const char *dir)
     cr_inst_init(&m->in);
     cr_inst_set_user(&m->in, m->user);
     (void)cr_inst_take_patch_changed(&m->in);
+    tabs_scan(dir);
     return m;
 }
 static void destroy(void *p) { free(p); }
@@ -79,14 +205,15 @@ static void midi(void *p, const uint8_t *msg, int len)
         cr_inst_midi(&((mpc_t *)p)->in, msg, (uint32_t)len);
 }
 
-/* the state: "CRS1" then the preset (4 hex), dirty (2), the patch (256 hex) */
+/* the state: "CRS1" then the preset (4 hex), dirty (2), the patch (256 hex); 0.13: "|" and each wave's wavetable
+ * file's path ("" = the bank), "|" between */
 static void state_get(mpc_t *m, char *b, int n)
 {
     static const char H[] = "0123456789abcdef";
     const uint8_t *pt = (const uint8_t *)&m->in.p;
     int k = 0;
     uint32_t i;
-    if (n < 4 + 6 + 2 * (int)CR_PATCH_BYTES + 1)
+    if (n < 4 + 6 + 2 * (int)CR_PATCH_BYTES + 3 + 2 * (int)CR_TABLES_PATH)
         return;
     memcpy(b, "CRS1", 4);
     k = 4;
@@ -96,6 +223,8 @@ static void state_get(mpc_t *m, char *b, int n)
         b[k++] = H[pt[i] & 15];
     }
     b[k] = 0;
+    if (m->fpath[0][0] || m->fpath[1][0])
+        sprintf(b + k, "|%s|%s", m->fpath[0], m->fpath[1]);
 }
 static int hex(char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1; }
 static void state_set(mpc_t *m, const char *s)
@@ -119,6 +248,25 @@ static void state_set(mpc_t *m, const char *s)
     m->in.cur = (uint16_t)(cur % CR_NPRESET);
     m->in.dirty = (uint8_t)(dirty != 0);
     (void)cr_inst_take_patch_changed(&m->in);
+    {   /* 0.13: the wavetable files, by path (their numbers may differ on another MPC) */
+        const char *p = s + 10 + 2 * CR_PATCH_BYTES;
+        int k;
+        for (k = 0; k < 2; k++) {
+            char rel[CR_TABLES_PATH];
+            size_t l = 0;
+            if (*p == '|')
+                for (p++; *p && *p != '|' && l < sizeof rel - 1u; p++)
+                    rel[l++] = *p;
+            rel[l] = 0;
+            if (l) {
+                uint32_t id = cr_tables_find(&TABS, rel);
+                set_file(m, k, id);
+                if (!id)                        /* not in this index: kept, plays the bank */
+                    snprintf(m->fpath[k], sizeof m->fpath[k], "%s", rel);
+            } else if (m->file[k] || m->fpath[k][0])
+                set_file(m, k, 0);
+        }
+    }
 }
 
 static void set_param(void *p, const char *key, const char *val)
@@ -139,6 +287,23 @@ static void set_param(void *p, const char *key, const char *val)
             cr_inst_all_off(&m->in);
             cr_inst_load(&m->in, (uint32_t)(b * 8 + s));   /* reported by mpc_engine_changed */
         }
+        return;
+    }
+    if (!strcmp(key, "table1") || !strcmp(key, "table2")) {
+        int v = (int)(atof(val) + 0.5), k = key[5] - '1';
+        if (v < 0 || v > (int)CR_TABLES_MAX)
+            return;
+        if ((uint32_t)v != m->file[k])
+            set_file(m, k, (uint32_t)v);
+        return;
+    }
+    if (!strcmp(key, "random")) {               /* a trigger: it springs back to 0 */
+        if (atof(val) > 0.5)
+            random_patch(m);
+        return;
+    }
+    if (!strcmp(key, "rkeep")) {
+        m->rkeep = atoi(val) == 1;
         return;
     }
     if (!strcmp(key, "preset")) {
@@ -172,6 +337,22 @@ static int get_param(void *p, const char *key, char *buf, int n)
     }
     if (!strcmp(key, "preset"))
         return snprintf(buf, (size_t)n, "%d", m->in.cur);
+    if (!strcmp(key, "table1") || !strcmp(key, "table2"))
+        return snprintf(buf, (size_t)n, "%u", (unsigned)m->file[key[5] - '1']);
+    if (!strcmp(key, "table1_display") || !strcmp(key, "table2_display")) {   /* "GROWL", "BANK", "MISSING" */
+        int k = key[5] - '1';
+        char lab[64];
+        if (!m->file[k] && !m->fpath[k][0])
+            return snprintf(buf, (size_t)n, "BANK");
+        if (!m->file[k] || !cr_tables_present(&TABS, m->file[k]))
+            return snprintf(buf, (size_t)n, "MISSING");
+        cr_tables_label(&TABS, m->file[k], lab, sizeof lab);
+        return snprintf(buf, (size_t)n, "%s", lab);
+    }
+    if (!strcmp(key, "random"))
+        return snprintf(buf, (size_t)n, "0");
+    if (!strcmp(key, "rkeep"))
+        return snprintf(buf, (size_t)n, "%d", m->rkeep);
     if (!strcmp(key, "pbank"))
         return snprintf(buf, (size_t)n, "%d", m->in.cur / 8);
     if (!strcmp(key, "pslot"))
@@ -237,10 +418,10 @@ int mpc_engine_changed(void *p, char *key, int len)
     mpc_t *m = p;
     uint32_t id;
     if (cr_inst_take_patch_changed(&m->in))
-        m->report = 3 + CR_NP;                  /* a new patch: every value moved */
-    if (m->report > 0) {
-        int k = 3 + (int)CR_NP - m->report--;
-        snprintf(key, (size_t)len, "%s", k < 3 ? PK[k] : KEYS[k - 3]);
+        m->report = 3 + CR_NP + 2;              /* a new patch: every value moved */
+    if (m->report > 0) {                        /* (after RANDOM, the two table files too) */
+        int k = 3 + (int)CR_NP + 2 - m->report--;
+        snprintf(key, (size_t)len, "%s", k < 3 ? PK[k] : k < 3 + (int)CR_NP ? KEYS[k - 3] : k == 3 + (int)CR_NP ? "table1" : "table2");
         return 1;
     }
     if ((id = cr_inst_take_changed(&m->in)) == 0)

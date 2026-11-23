@@ -44,8 +44,8 @@ almost word for word; the differences are listed at the end.
 | **ARP** | turns the arp on or off, and shows ARP | ARP · TEMPO · RATE · STEPS |
 | **SEQ** | SEQ (the pattern) | STEPS · TEMPO · RATE · ARP |
 | **GLO** | MIDI → KEYS → SETUP | MIDI CH · MIDI IN · CLOCK · BEND / KEYS · SCALE · ROOT · VELO IN / LOCAL · BREATH · ARP OUT · THEME |
-| **SAVE** | SAVE | USER SLOT · – · LETTER · CHAR |
-| **REC** | | LATCH on / off |
+| **SAVE** | SAVE | USER SLOT · TABLES (for RANDOM: NEW / KEEP) · LETTER · CHAR |
+| **REC** | | LATCH on / off (on the SAVE page: RANDOM) |
 | **PLAY** | | all notes off (on the SAVE page: INIT, a plain saw patch) |
 | **OCT− / OCT+** | | the keys' octave, −3 … +3 |
 
@@ -130,11 +130,21 @@ the slot (PRESET or K1), and rename with K3 (which letter) and K4 (the character
 Any other button cancels. An empty user slot loads as INIT; the editor can empty a slot. Presets saved with 0.1–0.3
 are moved to U1-1 onward the first time 0.4 starts. Program change 0–63 loads the factory presets, 64–127 U1-1 … U8-8.
 
+**RANDOM** (0.13): on the SAVE page, press **REC**. It loads a random preset (never an empty user slot) and varies it so
+it stays playable: each knob value pushed from the preset by up to a quarter of its range (now and then more), about a
+third of the switches changed, both banks a random factory bank. Volume, octave, glide, the amp envelope's amount,
+the arp-seq, the delay's time and feedback and the reverb's mode, size and decay stay as the preset has them, and the
+matrix never gets a destination that would hold the sound open or move a bank. Set **TABLES** (K2) to **KEEP** to keep
+the banks you have. Press REC again for another; SAVE stores the one you like. The editor, the plugin, the MPC and
+the Twisted Tracker's CRAFTY use the same rules.
+
 ## User wavetables
 
 Banks 10 to 41 (USER 1 … USER 32) are yours. In the editor, open a WAV in **User wavetables** (Serum and Vital tables,
 or any single cycle) and choose which five of its frames become the five waves. You hear the result straight away;
 **Send to FM-1** stores it. Each user bank is shared by every patch that uses it. Until you fill one, it plays bank 1. 0.1–0.3's two user banks become USER 1 and USER 2.
+The importer is the engine's own C (0.13), the same one the plugin, the MPC and the Twisted Tracker's CRAFTY use, so a
+WAV makes the same waves on all of them. Frames longer than 4096 samples aren't read.
 
 ## MIDI
 

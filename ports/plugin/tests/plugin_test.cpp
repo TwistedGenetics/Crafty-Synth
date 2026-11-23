@@ -95,6 +95,39 @@ int main()
         for (auto &f : toEd)
             sawCC |= f.size() == 3 && f[0] == 0xB0 && f[1] == CR_P[CR_CUT].cc && f[2] == 33;
         CHECK(sawCC, "the editor wasn't told about CUTOFF");
+        // 0.13: a wavetable file from the Wavetables folder in place of wave 1's bank
+        {
+            auto wf = CraftyTableFiles::folder().getChildFile("Basses").getChildFile("Square.wav");
+            wf.getParentDirectory().createDirectory();
+            juce::MemoryOutputStream o;
+            const int n = 600;
+            o.write("RIFF", 4); o.writeInt(36 + 2 * n); o.write("WAVEfmt ", 8); o.writeInt(16); o.writeShort(1);
+            o.writeShort(1); o.writeInt(44100); o.writeInt(88200); o.writeShort(2); o.writeShort(16);
+            o.write("data", 4); o.writeInt(2 * n);
+            for (int i = 0; i < n; i++)
+                o.writeShort((short)(i < n / 2 ? 20000 : -20000));
+            wf.replaceWithData(o.getData(), o.getDataSize());
+            juce::var got;
+            p.toEditorTables = [&](const juce::var &v) { got = v; };
+            auto *q = new juce::DynamicObject();
+            q->setProperty("rescan", 1);
+            p.tablesFromEditor(juce::var(q));
+            auto *files = got.getProperty("files", juce::var()).getArray();
+            CHECK(files && files->size() == 1 && (*files)[0].toString() == "Basses/Square.wav", "the folder's list");
+            CHECK(CraftyTableFiles::folder().getSiblingFile("TableIndex.txt").loadFileAsString().trim() == "Basses/Square.wav",
+                  "TableIndex.txt not written");
+            auto *s2 = new juce::DynamicObject();
+            s2->setProperty("set", 0);
+            s2->setProperty("path", "Basses/Square.wav");
+            p.tablesFromEditor(juce::var(s2));
+            CHECK(p.tableFile(0) == "Basses/Square.wav", "the file wasn't chosen");
+            float pk;
+            int zc;
+            double secs;
+            play(p, 44100.0, 57, pk, zc, secs);
+            CHECK(pk > 0.05f, "the wavetable file is silent");
+            p.toEditorTables = nullptr;
+        }
         p.layoutAspect = 1.62;                       // the window's size and shape go with the project
         p.editorW = 1500;
         p.editorH = 980;
@@ -149,6 +182,7 @@ int main()
             auto *qc = dynamic_cast<juce::RangedAudioParameter *>(q.getParameters()[CR_CUT]);
             CHECK((int)std::lround(qc->convertFrom0to1(qc->getValue())) == 33,
                   "state didn't restore CUTOFF");
+            CHECK(q.tableFile(0) == "Basses/Square.wav" && q.tableFile(1).isEmpty(), "state didn't restore the wavetable file");
         }
     }
     pump();

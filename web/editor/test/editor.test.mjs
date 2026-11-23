@@ -2,10 +2,13 @@
 // Crafty Synth editor: WAV wavetables in (a Serum-style file made here), the bank record, the SysEx packing, the values.
 import { test } from "node:test";
 import assert from "node:assert";
-import { parseWav, makeBank, defaultPicks, bankBytes, N, PEAK } from "../serum.js";
+import { readFileSync } from "node:fs";
+import { parseWav, makeBank, defaultPicks, bankBytes, bankName, N, PEAK } from "../serum.js";
 import { pack7, unpack7 } from "../device.js";
 import { fmt, bankOf, bankVal, semiOf, PI } from "../format.js";
 import M from "../meta.js";
+
+const engine = async () => (await WebAssembly.instantiate(readFileSync(new URL("../crafty.wasm", import.meta.url)), {})).instance.exports;
 
 function wav(frames, size, clm = true) {
   const n = frames * size, data = 44 + (clm ? 24 : 0), b = new ArrayBuffer(data + n * 4), dv = new DataView(b);
@@ -22,8 +25,8 @@ function wav(frames, size, clm = true) {
   return b;
 }
 
-test("a Serum-style table: frames found, picked, band-limited to 256 samples", () => {
-  const t = parseWav(wav(8, 2048));
+test("a Serum-style table: frames found, picked, band-limited to 256 samples", async () => {
+  const t = parseWav(wav(8, 2048), await engine());
   assert.equal(t.frameSize, 2048);
   assert.equal(t.frames, 8);
   const picks = defaultPicks(t.frames);
@@ -38,10 +41,34 @@ test("a Serum-style table: frames found, picked, band-limited to 256 samples", (
   assert.ok(crossings >= 15 && crossings <= 17, `crossings ${crossings}`);
 });
 
-test("a single-cycle WAV with no clm chunk is one frame", () => {
-  const t = parseWav(wav(1, 600, false));
+test("a single-cycle WAV with no clm chunk is one frame", async () => {
+  const w = await engine(), t = parseWav(wav(1, 600, false), w);
   assert.equal(t.frames, 1);
   assert.equal(t.frameSize, 600);
+  assert.throws(() => parseWav(new ArrayBuffer(64), w), /not a WAV/);
+  assert.equal(bankName("Growl bass.wav"), "GROWL BASS");
+});
+
+test("Random Patch through the engine: a saved slot, a varied preset, the banks kept", async () => {
+  const w = await engine();
+  w.cw_init();
+  const saved = new Uint8Array(w.memory.buffer, w.cw_rand_saved(), 192);
+  saved.fill(0); for (let i = 0; i < 64; i++) saved[i] = 1; saved[100] = 1;
+  w.cw_rand_seed(99);
+  for (let n = 0; n < 200; n++) {
+    const slot = w.cw_rand_slot();
+    assert.ok(slot < 64 || slot === 100, `slot ${slot}`);
+  }
+  const fac = new Uint8Array(w.memory.buffer, w.cw_factory(), 64 * 128);
+  const P = new Uint8Array(w.memory.buffer, w.cw_patch(), 128), C = new Uint8Array(w.memory.buffer, w.cw_rand_cur(), 128);
+  P.set(fac.subarray(3 * 128, 4 * 128)); C.set(P); C[12 + PI.W1BANK] = 120; C[12 + PI.W2BANK] = 121;
+  w.cw_rand_vary(1);
+  assert.equal(P[12 + PI.W1BANK], 120);
+  assert.equal(P[12 + PI.W2BANK], 121);
+  assert.equal(P[12 + PI.VOL], fac[3 * 128 + 12 + PI.VOL]);
+  let moved = 0;
+  for (let i = 0; i < 82; i++) if (P[12 + i] !== fac[3 * 128 + 12 + i]) moved++;
+  assert.ok(moved > 10, `moved ${moved}`);
 });
 
 test("the bank record is the firmware's 2,576 bytes", () => {

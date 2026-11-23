@@ -17,7 +17,7 @@
  *   LFO        LFO 1 -> LFO 2; held while turning a knob: LFO assign (the CRAFTsynth's hold-LFO)
  *   SEL        MATRIX; held while turning a knob: MOD EG assign
  *   FX         DIST + DELAY -> OUTPUT      ARP  arp on / off (and its page)     SEQ  the pattern page
- *   REC        LATCH         PLAY  all notes off (on SAVE: INIT the patch)      GLO  global pages      SAVE  save
+ *   REC        LATCH (on SAVE: RANDOM)   PLAY  all notes off (on SAVE: INIT)    GLO  global pages      SAVE  save
  * Copyright (C) 2026 Jamie (TwistedGenetics). */
 #include "cr_app.h"
 #include "cr_presets.h"
@@ -62,7 +62,7 @@ static const char *const CR_PG_NAME[PG_N] = {"OSC", "WAVES", "OSC B", "TUNE", "S
     "MIDI", "KEYS", "SETUP", "SAVE"};
 /* the page's four knobs: a patch parameter, or one of the G_ values (globals and page controls) */
 enum { G_NONE = 100, G_MSRC, G_MDST, G_MDEP, G_STEPS, G_MCH, G_MIN, G_CLOCK, G_BEND, G_KEYS, G_SCALE, G_ROOT,
-       G_VELO, G_LOCAL, G_BREATH, G_ARPOUT, G_SLOT, G_CPOS, G_CHAR, G_THEME };
+       G_VELO, G_LOCAL, G_BREATH, G_ARPOUT, G_SLOT, G_CPOS, G_CHAR, G_THEME, G_RTAB };
 static const uint8_t CR_PAGE_P[PG_N][4] = {
     {CR_W1POS, CR_W2POS, CR_MIX, CR_OMAMT},   {CR_W1BANK, CR_W2BANK, CR_OMMODE, CR_SPREAD},
     {CR_BMODE, CR_BAMT, CR_W2POS, CR_TUNE},   {CR_TUNE, CR_FINE, CR_OCT, CR_GLIDE},
@@ -76,7 +76,7 @@ static const uint8_t CR_PAGE_P[PG_N][4] = {
     {CR_CHMIX, CR_CHRATE, CR_PHMIX, CR_PHRATE}, {CR_ERA, CR_CRUSH, CR_OTT, CR_DIST},
     {CR_ARP, CR_TEMPO, CR_ARPRATE, G_STEPS},  {G_STEPS, CR_TEMPO, CR_ARPRATE, CR_ARP},
     {G_MCH, G_MIN, G_CLOCK, G_BEND},          {G_KEYS, G_SCALE, G_ROOT, G_VELO},
-    {G_LOCAL, G_BREATH, G_ARPOUT, G_THEME},    {G_SLOT, G_NONE, G_CPOS, G_CHAR},
+    {G_LOCAL, G_BREATH, G_ARPOUT, G_THEME},    {G_SLOT, G_RTAB, G_CPOS, G_CHAR},
 };
 static uint32_t cr_page = PG_OSC;
 static uint32_t cr_ver = 1, cr_drawn;            /* the screen redraws when cr_ver moves on */
@@ -89,6 +89,7 @@ static int32_t cr_oct;                           /* the keys' octave, -3..3 */
 static uint8_t cr_latch, cr_lat_on[16], cr_lat_n; /* LATCH: the notes kept sounding */
 static uint32_t cr_msrc;                         /* MATRIX: the slot (source) shown */
 static uint32_t cr_save_slot, cr_cpos;
+static uint32_t cr_rand_keep, cr_seed;          /* SAVE: RANDOM keeps the banks; the generator */
 static uint8_t cr_sus;                           /* MIDI sustain pedal */
 static uint32_t cr_sus_bits[4];
 static uint8_t cr_key_note[27];                  /* the note each key started (so OCT moves don't hang notes) */
@@ -235,6 +236,7 @@ static int cr_preset_saved(uint32_t slot)          /* a user slot holds a patch 
     r = cr_user_rec(slot);
     return r[109] == CR_PATCH_MAGIC && r[110] == CR_PATCH_VER;
 }
+static int cr_rand_saved(void *ctx, uint32_t slot) { (void)ctx; return cr_preset_saved(slot); }
 /* preset slot n as it is now (an empty user slot: INIT) */
 static void cr_preset_read(uint32_t slot, cr_patch_t *out)
 {
@@ -447,6 +449,7 @@ static const char *cr_plabel(uint32_t p)
     case G_CPOS: return "LETTER";
     case G_CHAR: return "CHAR";
     case G_THEME: return "THEME";
+    case G_RTAB: return "TABLES";
     default: return p < CR_NP ? CR_P[p].name : "";
     }
 }
@@ -480,6 +483,7 @@ static void cr_ptext(uint32_t p, char *b, int lng)
         case G_ARPOUT: cr_cpy(b, cr_g.arp_out ? "ARP" : "KEYS"); break;
         case G_SLOT: cr_preset_label(cr_save_slot, b); break;
         case G_CPOS: cr_num(b, (int32_t)cr_cpos + 1, 0); break;
+        case G_RTAB: cr_cpy(b, cr_rand_keep ? "KEEP" : "NEW"); break;
         case G_THEME: cr_cpy(b, CR_THEMES[cr_g.theme % CR_NTHEME].name); if (!lng) b[5] = 0; break;
         case G_CHAR: b[0] = cr_p.name[cr_cpos] ? cr_p.name[cr_cpos] : '_'; b[1] = 0; if (b[0] == ' ') cr_cpy(b, "SPC"); break;
         default: break;
@@ -610,6 +614,7 @@ static void cr_gturn(uint32_t p, int32_t d)
     case G_THEME: cr_g.theme = (uint8_t)lim32(cr_g.theme + d, 0, CR_NTHEME - 1); break;
     case G_SLOT: cr_save_slot = (uint32_t)lim32((int32_t)cr_save_slot + d, CR_NFACTORY, CR_NPRESET - 1); break;
     case G_CPOS: cr_cpos = (uint32_t)lim32((int32_t)cr_cpos + d, 0, 10); break;
+    case G_RTAB: cr_rand_keep = d > 0; break;
     case G_CHAR: {
         static const char cs[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+/#&";
         int32_t i = 0, n = (int32_t)sizeof cs - 1;
@@ -712,6 +717,17 @@ static void cr_button(uint32_t b)                /* a press (LFO, SEL, ENV: a re
         break;
     case B_SEQ: cr_go(PG_SEQ); break;
     case B_REC:
+        if (cr_page == PG_SAVE) {                /* RANDOM: a preset, varied (src/core cr_patch_random) */
+            static cr_patch_t t;
+            if (!cr_seed)
+                cr_seed = plat_ms() * 2654435761u + cr_keys_down + 1u;
+            cr_preset_read(cr_rand_slot(&cr_seed, cr_rand_saved, 0), &t);
+            cr_patch_random(&t, &cr_p, &cr_seed, cr_rand_keep ? CR_RAND_KEEP_TABLES : 0u);
+            cr_use(&t);
+            cr_dirty = 1;
+            cr_flash("RANDOM PATCH");
+            break;
+        }
         cr_latch ^= 1u;
         if (!cr_latch)
             cr_lat_clear();
@@ -841,7 +857,7 @@ void cr_app_input(void)
                     cr_flash("PATTERN CLEARED");
                     continue;
                 }
-                if (cr_page == PG_SAVE && k != B_SAVE && k != B_PLAY) {
+                if (cr_page == PG_SAVE && k != B_SAVE && k != B_PLAY && k != B_REC) {
                     cr_go(PG_OSC);
                     cr_flash("NOT SAVED");
                     continue;
@@ -1309,7 +1325,7 @@ static void cr_screen(void)
                 sx_rect(x, 102, 19, 2, t->ink);
                 sx_center(x, 19, 74, &FONT_M, c, t->ink);
             }
-            sx_center(4, 232, 116, &FONT_S, "SAVE: SAVE    PLAY: INIT", t->soft);
+            sx_center(4, 232, 116, &FONT_S, "PLAY: INIT     REC: RANDOM", t->soft);
         } else {
             cr_ptext(CR_PAGE_P[cr_page][0], b, 1);
             sx_center(4, 232, 46, &FONT_M, cr_plabel(CR_PAGE_P[cr_page][0]), t->soft);

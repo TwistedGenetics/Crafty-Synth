@@ -43,7 +43,8 @@ endforeach()
 set(ENGINE
     ${REPO}/src/core/cr_patch.c ${REPO}/src/core/cr_arp.c ${REPO}/src/core/cr_text.c
     ${REPO}/src/dsp/cr_synth.c ${REPO}/src/dsp/cr_wt.c ${REPO}/src/dsp/cr_filter.c ${REPO}/src/dsp/cr_fx.c
-    ${REPO}/src/host/cr_inst.c ${REPO}/src/host/cr_proto.c)
+    ${REPO}/src/host/cr_inst.c ${REPO}/src/host/cr_proto.c
+    ${REPO}/src/host/cr_wav.c ${REPO}/src/host/cr_tables.c)
 add_library(crafty_engine STATIC ${ENGINE})
 target_include_directories(crafty_engine PUBLIC ${REPO}/src/core ${REPO}/src/dsp ${REPO}/src/host ${GEN})
 set_target_properties(crafty_engine PROPERTIES POSITION_INDEPENDENT_CODE ON)

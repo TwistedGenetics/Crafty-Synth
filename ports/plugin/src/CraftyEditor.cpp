@@ -55,6 +55,7 @@ CraftyEditor::CraftyEditor(CraftyProcessor &p)
                           setSize(w, h);
                   }
               })
+              .withEventListener("crafty-tables", [this](const juce::var &v) { proc.tablesFromEditor(v); })
               .withEventListener("crafty-midi", [this](const juce::var &v) {
                   std::vector<uint8_t> f;
                   if (auto *a = v.getArray())
@@ -70,6 +71,7 @@ CraftyEditor::CraftyEditor(CraftyProcessor &p)
             a.add((int)b);
         web.emitEventIfBrowserIsVisible("crafty-midi", juce::var(a));
     };
+    proc.toEditorTables = [this](const juce::var &v) { web.emitEventIfBrowserIsVisible("crafty-tables", v); };
     // resizable by the host's window edges, and by the page's own corner handle ("crafty-resize"): JUCE's corner
     // component would sit under the web view, where it can't be reached
     setResizable(true, false);
@@ -78,7 +80,11 @@ CraftyEditor::CraftyEditor(CraftyProcessor &p)
     web.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 }
 
-CraftyEditor::~CraftyEditor() { proc.toEditor = nullptr; }
+CraftyEditor::~CraftyEditor()
+{
+    proc.toEditor = nullptr;
+    proc.toEditorTables = nullptr;
+}
 
 void CraftyEditor::resized()
 {

@@ -1,0 +1,23 @@
+# Crafty Synth 0.13: RANDOM on the SAVE page (REC), its TABLES knob (K2: NEW / KEEP)
+wait 300
+tap HOME
+expect page 1
+turn K1 40
+expect param.5 126
+tap SAVE
+expect page 23
+turn K2 1
+tap REC
+expect page 23
+expect latch 0
+expect dirty 1
+expect param.5 126
+wait 1600
+shot p_random.ppm
+turn K2 -1
+tap REC
+expect page 23
+tap PLAY
+expect page 23
+tap FX
+expect page 0

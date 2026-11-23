@@ -22,6 +22,8 @@
   "sources": [
    "ports/mpc/cr_mpc.c",
    "src/host/cr_inst.c",
+   "src/host/cr_wav.c",
+   "src/host/cr_tables.c",
    "src/core/cr_patch.c",
    "src/core/cr_arp.c",
    "src/core/cr_text.c",

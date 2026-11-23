@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.13 beta (2026-11-23)
+
+Lined up with the Twisted Tracker's CRAFTY engine (its v1.17 / v1.18 changes), so all of them behave the same.
+
+- **RANDOM on every version**, the Tracker's rules: a random preset (never an empty user slot) varied so it stays
+  playable: knob values pushed from it by up to a quarter (now and then 60%) of their range, a third of the switches
+  changed, a random factory bank on each oscillator; volume, octave, glide, amp EG amount, the arp-seq, delay time and
+  feedback and the reverb's mode, size and decay left alone; no matrix destination that holds the amp open or moves a
+  bank. KEEP keeps your banks (and files).
+  - FM-1: on the SAVE page, REC; TABLES (K2) NEW / KEEP.
+  - Editor and AU / VST3: RANDOM (shift-click keeps the tables). It used to randomise a dozen values over their whole
+    range, banks included (empty user banks too).
+  - MPC: a RANDOM button and RND TABLES on the PRESET page.
+- **Wavetable files**, as the Tracker's `/Crafty/Wavetables`: WAVs in a Wavetables folder (sub-folders too) get a
+  number for good in `TableIndex.txt` (the same file format everywhere), and TABLE 1 / TABLE 2 play one in place of
+  an oscillator's bank.
+  - AU / VST3: `.../Crafty Synth/Wavetables`, a TABLE FILE list under each oscillator; the project keeps the path.
+  - MPC: `data/Wavetables`, TABLE 1 / TABLE 2 on their own page, shown by name.
+  - RANDOM (NEW) gives each oscillator one of your files half the time, as on the Tracker.
+- **One WAV importer**: the editor's (JavaScript) and the Tracker's (C++) are now one C file every version uses
+  (`src/host/cr_wav.c`); the editor runs it in WebAssembly. Same results as before (within 1 in 26000). It also reads
+  WAVE_FORMAT_EXTENSIBLE files; frames over 4096 samples are refused, as on the Tracker.
+- Engine (for the Tracker): bank builds can wait for the host's main loop instead of the audio thread
+  (`defer_tables`, `cr_inst_tables()`); a host's wavetable file can stand in for a bank (`cr_inst_file_table()`). The
+  playing bank's noise flag now follows the bank that is actually built. Off by default: the FM-1, editor and plugins
+  play as before.
+
 ## 0.12 beta (2026-11-23)
 
 - **Sub oscillator** on every version: SUB LVL, SUB OCT (-1 / -2) and SUB WAVE (sine, triangle, square, its edges

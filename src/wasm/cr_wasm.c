@@ -3,6 +3,7 @@
  * own engine through src/host/cr_inst.c (as the AU / VST3 and MPC plugins), so the browser plays what the FM-1 plays.
  * Copyright (C) 2026 Jamie (TwistedGenetics). */
 #include "cr_inst.h"
+#include "cr_wav.h"
 #include "cr_presets.h"
 #define EXPORT __attribute__((visibility("default")))
 
@@ -72,3 +73,48 @@ EXPORT float *cw_render(uint32_t n)
     cr_inst_render(&I, OUT, n);
     return OUT;
 }
+
+/* ---- 0.13: the shared WAV importer (src/host/cr_wav.c) ----
+ * The editor grows the memory and puts the file at cw_heap(), calls cw_wav_open(bytes) (the frames, 0: not read),
+ * then cw_wav_bank(5 frames) for the 5 x 256 samples (0: silent). */
+extern unsigned char __heap_base;
+static cr_wav_t WAV;
+static cr_wav_work_t WORK;
+static int16_t BANK[5][CR_WT_N];
+static uint32_t wav_read(void *ctx, uint32_t off, void *buf, uint32_t n)
+{
+    const cr_wav_t *w = &WAV;
+    (void)ctx;
+    if (off >= w->size)
+        return 0;
+    if (n > w->size - off)
+        n = w->size - off;
+    memcpy(buf, &__heap_base + off, n);
+    return n;
+}
+EXPORT uint8_t *cw_heap(void) { return &__heap_base; }
+EXPORT uint32_t cw_wav_open(uint32_t bytes) { return cr_wav_open(&WAV, wav_read, 0, bytes) ? WAV.frames : 0u; }
+EXPORT uint32_t cw_wav_frame_size(void) { return WAV.frame_size; }
+EXPORT const int16_t *cw_wav_bank(uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e)
+{
+    uint32_t pk[5];
+    pk[0] = a; pk[1] = b; pk[2] = c; pk[3] = d; pk[4] = e;
+    return cr_wav_bank(&WAV, pk, BANK, &WORK) ? &BANK[0][0] : 0;
+}
+
+/* ---- 0.13: Random Patch (src/core cr_patch_random): the editor marks the saved slots, picks, loads, varies ---- */
+static uint8_t SAVED[CR_NPRESET];
+static cr_patch_t CUR;
+static uint32_t SEED;
+static int rnd_saved(void *ctx, uint32_t slot) { (void)ctx; return SAVED[slot % CR_NPRESET]; }
+EXPORT uint8_t *cw_rand_saved(void) { return SAVED; }
+EXPORT uint8_t *cw_rand_cur(void) { return (uint8_t *)&CUR; }
+EXPORT void cw_rand_seed(uint32_t s) { SEED = s; }
+EXPORT uint32_t cw_rand_slot(void) { return cr_rand_slot(&SEED, rnd_saved, 0); }
+/* the preset in cw_patch() varied, the banks kept from cw_rand_cur() with flags 1 */
+EXPORT void cw_rand_vary(uint32_t flags)
+{
+    (void)cr_patch_check(&P);
+    cr_patch_random(&P, &CUR, &SEED, flags);
+}
+

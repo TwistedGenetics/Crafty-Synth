@@ -4,7 +4,7 @@
 import M from "./meta.js";
 import { fmt, choices, PI, bankOf, band, bandVal, LISTS } from "./format.js";
 import { Device, WORKING, inPlugin } from "./device.js";
-import { parseWav, makeBank, defaultPicks, bankBytes, N, PEAK } from "./serum.js";
+import { parseWav, makeBank, defaultPicks, bankBytes, bankName, N, PEAK } from "./serum.js";
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, attrs = {}, ...kids) => {
@@ -298,6 +298,43 @@ function tabs(names, on, cb) {
   return t;
 }
 
+/* 0.13, the plugin: a wavetable file from its Wavetables folder in place of a wave's bank (the Twisted Tracker's
+   TABLE 1 / 2 FILE). The plugin keeps the list and the choice ("crafty-tables" events); "" is the bank. */
+const tableSel = [];
+let tableFiles = [], tableNow = ["", ""];
+const tableLabel = (p) => p.slice(p.lastIndexOf("/") + 1).replace(/\.wav$/i, "");
+function tableFilePick(k) {
+  const s = el("select");
+  s.onchange = () => setTableFile(k, s.value);
+  s.onfocus = () => window.__JUCE__.backend.emitEvent("crafty-tables", { get: 1 });   // new files on the disk
+  tableSel[k] = s;
+  return el("div", { class: "pick" }, el("label", { textContent: "TABLE FILE" }), s);
+}
+function renderTables() {
+  tableSel.forEach((s, k) => {
+    const opts = [el("option", { value: "", textContent: "(the bank)" })], groups = new Map();
+    for (const p of tableFiles) {
+      const i = p.lastIndexOf("/"), f = i < 0 ? "" : p.slice(0, i);
+      if (!groups.has(f)) groups.set(f, f ? el("optgroup", { label: f }) : null);
+      const o = el("option", { value: p, textContent: tableLabel(p) });
+      if (groups.get(f)) groups.get(f).append(o); else opts.push(o);
+    }
+    if (tableNow[k] && !tableFiles.includes(tableNow[k]))
+      opts.push(el("option", { value: tableNow[k], textContent: `MISSING: ${tableLabel(tableNow[k])}` }));
+    s.replaceChildren(...opts, ...[...groups.values()].filter(Boolean));
+    s.value = tableNow[k];
+  });
+}
+function setTableFile(k, path) {
+  tableNow[k] = path;
+  window.__JUCE__.backend.emitEvent("crafty-tables", { set: k, path });
+}
+if (inPlugin) {
+  window.__JUCE__.backend.addEventListener("crafty-tables", (v) => {
+    tableFiles = v.files || []; tableNow = v.sel || ["", ""]; renderTables();
+  });
+}
+
 function build() {
   const rack = $("rack");
   for (const [w, k] of [["A", 1], ["B", 2]]) {
@@ -307,6 +344,7 @@ function build() {
     if (k === 1) ks.append(knob("W1POS", "WT POS"), knob("OMAMT"), pick("OMMODE"));
     else ks.append(knob("W2POS", "WT POS", "acc2"), knob("TUNE", null, "acc2"), knob("FINE", null, "acc2"),
       knob("BAMT", "B MOD", "acc2"), pick("BMODE", "B MODE"));
+    if (inPlugin) ks.append(tableFilePick(k - 1));
     rack.append(panel("osc", head(w, `OSC ${w}`, bankSel), views[`wt${w}`], ks));
   }
   rack.append(panel("voice", head(null, "VOICE"), el("div", { class: "knobs" }, knob("MIX"), knob("SPREAD"), knob("GLIDE"),
@@ -642,12 +680,12 @@ function buildUbanks() {
   file.onchange = async () => {
     if (!file.files[0]) return;
     try {
-      const t = parseWav(await file.files[0].arrayBuffer());
+      const t = parseWav(await file.files[0].arrayBuffer(), wasm);
       if (!table) before = ubank[at];
       table = t;
       picksU = defaultPicks(table.frames);
       rng.forEach(([r, lab], k) => { r.disabled = false; r.max = table.frames - 1; r.value = picksU[k]; lab.textContent = `WAVE ${k + 1}: FRAME ${picksU[k] + 1}`; });
-      name.value = file.files[0].name.replace(/\.wav$/i, "").toUpperCase().slice(0, 13);
+      name.value = bankName(file.files[0].name);
       info.textContent = `${table.frames} frame${table.frames > 1 ? "s" : ""} of ${table.frameSize} samples, previewing in USER ${at + 1}. Send to keep it.`;
       send.disabled = false;
       update();
@@ -660,7 +698,7 @@ function buildUbanks() {
       status(`Sending USER ${u + 1}...`);
       await dev.putBank(u, bankBytes(name.value, data));
       ubankUsed[u] = true;
-      ubankName[u] = name.value.toUpperCase().slice(0, 13);
+      ubankName[u] = bankName(name.value);
       renderUbankSlots();
       before = data;                              // it's the bank now: changing slot keeps it
       status(inPlugin ? `USER ${u + 1} stored.` : `USER ${u + 1} is on the FM-1.`);
@@ -706,6 +744,7 @@ async function connect() {
     status("Connected: reading the user wavetables...");
     await readUserBanks();
     status("Connected");
+    if (inPlugin) window.__JUCE__.backend.emitEvent("crafty-tables", { get: 1 });
   } catch (e) { status(e); }
 }
 async function pull() { loadBytes((await dev.getPatch(0x3fff)).bytes); }
@@ -741,15 +780,27 @@ $("init").onclick = () => {
   patch.set(b);
   pushPatch();
 };
-$("random").onclick = () => {
-  const r = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-  for (const k of ["W1POS", "W2POS", "MIX", "OMAMT", "RES", "MORPH", "FEGAMT", "FD", "FS", "L1RATE", "L1SHAPE"]) patch[12 + PI[k]] = r(0, 127);
-  patch[12 + PI.W1BANK] = r(0, 127); patch[12 + PI.W2BANK] = r(0, 127); patch[12 + PI.OMMODE] = r(0, 15) * 8 + 4;
-  patch[12 + PI.SPREAD] = r(0, 1) ? r(0, 63) : r(64, 127);
-  patch[12 + PI.CUT] = r(50, 127);
-  patch[12 + PI.DST0] = r(1, 13); patch[12 + PI.DEP0] = r(40, 90);
+/* RANDOM: the engine's Random Patch (src/core cr_patch_random, as the FM-1's SAVE + REC and every other version): a
+   random preset (a saved user one too when connected), varied so it stays playable. Shift-click keeps the banks. */
+let randSeeded = false;
+async function randomPatch(keep) {
+  if (!wasm) return status("The editor's engine is still loading.");
+  if (!randSeeded) { wasm.cw_rand_seed((Math.random() * 4294967296) >>> 0 || 1); randSeeded = true; }
+  const saved = new Uint8Array(wasm.memory.buffer, wasm.cw_rand_saved(), 192);
+  for (let i = 0; i < 192; i++) saved[i] = i < 64 || (dev.connected && userNames[i - 64] !== null) ? 1 : 0;
+  const slot = wasm.cw_rand_slot();
+  const bytes = slot < 64 ? Uint8Array.from(M.presets[slot].bytes) : (await dev.getPatch(slot)).bytes;
+  new Uint8Array(wasm.memory.buffer, wasm.cw_rand_cur(), 128).set(patch);
+  new Uint8Array(wasm.memory.buffer, wasm.cw_patch(), 128).set(bytes);
+  wasm.cw_rand_vary(keep ? 1 : 0);
+  patch.set(new Uint8Array(wasm.memory.buffer, wasm.cw_patch(), 128));
   pushPatch();
-};
+  if (inPlugin && !keep)                         // as the Tracker: half the time one of your files, else the bank
+    for (const k of [0, 1])
+      setTableFile(k, tableFiles.length && Math.random() < 0.5 ? tableFiles[Math.floor(Math.random() * tableFiles.length)] : "");
+  status(`Random patch from ${label(slot)}${keep ? ", wavetables kept" : ""}.`);
+}
+$("random").onclick = (e) => randomPatch(e.shiftKey).catch(status);
 $("audio").onclick = (e) => { e.stopPropagation(); soundButton(); };
 $("connect").onclick = connect;
 $("save").onclick = async () => {

@@ -110,6 +110,18 @@ def align_popups(lines):
     return "\n".join(lines) + "\n"
 
 
+def locked_order(params):
+    """params.json's parameters in params.lock's order (the VST's index: saved projects bind by it), new keys after
+    it: an engine parameter appended later lands after the port's own (table files, random) instead of before"""
+    lock = (PORT / "params.lock").read_text().split() if (PORT / "params.lock").exists() else []
+    head, rest = params.split('"params": [\n', 1)
+    body, tail = rest.split("\n ],\n", 1)
+    lines = [ln.rstrip(",") for ln in body.split("\n")]
+    keyof = {json.loads(ln)["key"]: ln for ln in lines}
+    order = [k for k in lock if k in keyof] + [json.loads(ln)["key"] for ln in lines if json.loads(ln)["key"] not in lock]
+    return head + '"params": [\n' + ",\n".join(keyof[k] for k in order) + "\n ],\n" + tail
+
+
 def main():
     check = "--check" in sys.argv
     GEN.mkdir(parents=True, exist_ok=True)
@@ -118,9 +130,9 @@ def main():
     run(sys.executable, "tools/gen_presets.py", "--keys", GEN / "cr_keys.h")
     exe = PORT / "build" / "gen_params"
     run(os.environ.get("CC", "cc"), "-O1", "-std=c99", "-Wall", "-Wextra", "-Werror", "-Isrc/core", "-Isrc/dsp",
-        f"-I{GEN}", f"-I{PORT}", PORT / "gen_params.c", "src/core/cr_patch.c", "src/core/cr_text.c",
+        "-Isrc/host", f"-I{GEN}", f"-I{PORT}", PORT / "gen_params.c", "src/core/cr_patch.c", "src/core/cr_text.c",
         "src/core/cr_arp.c", "-o", exe)
-    params = run(exe)
+    params = locked_order(run(exe))
     with tempfile.TemporaryDirectory() as td:
         pj = Path(td) / "params.json"
         pj.write_text(params)
