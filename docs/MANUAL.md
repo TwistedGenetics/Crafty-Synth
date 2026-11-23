@@ -9,8 +9,11 @@ almost word for word; the differences are listed at the end.
 - **Top band:** the preset (`3-1` is factory bank 3, slot 1; `U12-8` is user bank 12, slot 8) and its name; `*` means you've changed it since loading. On the
   right is the page you're on.
 - **Second line:** the oscillator modifier in use; on the right, `ARP` / `SEQ`, `LATCH` and the keys' octave.
-- **Middle:** a picture of the page: both waves on the OSC pages, the envelope, the LFO shape, or the filter's
-  response. Turn a knob and its name and value show here in large type for a moment.
+- **Middle:** a picture of the page that moves as you turn its knobs: both wavetables in 3D on the OSC pages (WT POS
+  slides through them), the envelope, the LFO shape, the filter's response, the sub's wave, the distortion's curve and
+  the delay's echoes, the reverb's tail, the chorus and phaser sweeps, the crusher's steps; the pages without a
+  picture (OUTPUT, ARP, MIDI, KEYS) list their four values with bars. The knob you turn lights up below (0.16: no big
+  number over the picture any more).
 - **Bottom:** the page's four values, one over each of K1–K4.
 
 ## Knobs
@@ -45,7 +48,9 @@ almost word for word; the differences are listed at the end.
 | **SEQ** | SEQ (the pattern) | STEPS · TEMPO · RATE · ARP |
 | **GLO** | MIDI → KEYS → SETUP | MIDI CH · MIDI IN · CLOCK · BEND / KEYS · SCALE · ROOT · VELO IN / LOCAL · BREATH · ARP OUT · THEME |
 | **SAVE** | SAVE | USER SLOT · TABLES (for RANDOM: NEW / KEEP) · LETTER · CHAR |
-| **REC** | | LATCH on / off (on the SAVE page: RANDOM) |
+| (SELECT) | RANDOM (after SETUP) | DEPTH · TABLES (NEW / KEEP) · USER WT (ON / OFF) |
+| **REC** | | LATCH on / off (on the RANDOM and SAVE pages: RANDOM) |
+| **PLAY + REC** | | RANDOM, on any page (hold PLAY, press REC) |
 | **PLAY** | | all notes off (on the SAVE page: INIT, a plain saw patch) |
 | **OCT− / OCT+** | | the keys' octave, −3 … +3 |
 
@@ -130,13 +135,19 @@ the slot (PRESET or K1), and rename with K3 (which letter) and K4 (the character
 Any other button cancels. An empty user slot loads as INIT; the editor can empty a slot. Presets saved with 0.1–0.3
 are moved to U1-1 onward the first time 0.4 starts. Program change 0–63 loads the factory presets, 64–127 U1-1 … U8-8.
 
-**RANDOM** (0.13): on the SAVE page, press **REC**. It loads a random preset (never an empty user slot) and varies it so
-it stays playable: each knob value pushed from the preset by up to a quarter of its range (now and then more), about a
-third of the switches changed, both banks a random factory bank. Volume, octave, glide, the amp envelope's amount,
-the arp-seq, the delay's time and feedback and the reverb's mode, size and decay stay as the preset has them, and the
-matrix never gets a destination that would hold the sound open or move a bank. Set **TABLES** (K2) to **KEEP** to keep
-the banks you have. Press REC again for another; SAVE stores the one you like. The editor, the plugin, the MPC and
-the Twisted Tracker's CRAFTY use the same rules.
+**RANDOM**: hold **PLAY** and press **REC** on any page, or press **REC** on the RANDOM page (SELECT, after SETUP)
+or the SAVE page. It loads a random preset (never an empty user slot), varies it and names it **RND** and the preset's
+name, so you can see it's new. The RANDOM page's knobs set how:
+- **DEPTH**: low stays close to the preset (knob values pushed up to a quarter of their range, a third of the switches
+  changed); higher pushes more of them anywhere in their range and changes more switches; at 100% nearly everything
+  moves. Volume, octave, glide, the amp envelope's amount, the arp-seq, the delay's time and feedback and the reverb's
+  mode, size and decay always stay as the preset has them, the amp sustain stays high enough to hear, and the matrix
+  never gets a destination that would hold the sound open or move a bank.
+- **TABLES**: NEW gives each oscillator a new bank, KEEP keeps yours.
+- **USER WT**: ON lets a new bank be one of your user banks half the time (when you have some), OFF factory only.
+
+The page shows which preset the last one came from. Press REC (or PLAY + REC) again for another; SAVE stores the one you
+like.
 
 ## User wavetables
 

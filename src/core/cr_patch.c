@@ -375,32 +375,71 @@ static int rnd_dest_bad(uint32_t src, uint32_t d)
 {
     return (d >= CR_D_AEGAMT && d <= CR_D_VOL) || d == CR_D_W1BANK || d == CR_D_W2BANK || !cr_dest_ok(src, d);
 }
-void cr_patch_random(cr_patch_t *p, const cr_patch_t *cur, uint32_t *s, uint32_t flags)
+/* a time or level leaning low (amp envelope times at full depth: most patches still speak) */
+static int rnd_short(uint32_t id)
 {
-    uint32_t id;
+    return id == CR_AA || id == CR_AD || id == CR_AR || id == CR_FA || id == CR_MA;
+}
+void cr_patch_random(cr_patch_t *p, const cr_patch_t *cur, uint32_t *s, uint32_t flags, uint32_t depth,
+                     uint32_t umask)
+{
+    uint32_t id, i, nu = 0;
+    float a = (float)(depth > 127u ? 127u : depth) / 127.f;   /* 0: the Tracker's rules; 1: anything goes */
+    char nm[12];
+    for (i = 0; i < CR_NUBANK; i++)
+        nu += (umask >> i) & 1u;
     for (id = 0; id < CR_NP; id++) {
         uint32_t n = rnd_choices(id);
         if (CR_P[id].kind == CR_K_BANK) {
             if ((flags & CR_RAND_KEEP_TABLES) && cur)
                 p->p[id] = cur->p[id];
-            else if (!(flags & CR_RAND_KEEP_TABLES))
-                p->p[id] = (uint8_t)rnd_choice_val(id, cr_rand(s) % 8u);
+            else if (!(flags & CR_RAND_KEEP_TABLES)) {
+                if (nu && cr_rand(s) % 2u) {    /* half the time one of your banks, when you have any */
+                    uint32_t k = cr_rand(s) % nu, u;
+                    for (u = 0; u < CR_NUBANK; u++)
+                        if (((umask >> u) & 1u) && !k--)
+                            break;
+                    p->p[id] = (uint8_t)cr_bank_val(CR_NBANK + u, id == CR_W2BANK);
+                } else
+                    p->p[id] = (uint8_t)rnd_choice_val(id, cr_rand(s) % 8u);
+            }
             continue;
         }
         if (cr_rand_keeps(id))
             continue;
-        if (n) {                                /* two in three keep the preset's choice */
+        if (n) {                                /* two in three keep the preset's choice (fewer with depth) */
             uint32_t v;
-            if (rnd01(s) > 0.33f)
+            if (rnd01(s) > 0.33f + 0.67f * a)
                 continue;
             v = rnd_choice_val(id, cr_rand(s) % n);
             if (CR_P[id].kind == CR_K_DEST && rnd_dest_bad(id - CR_DST0, v))
                 continue;
             p->p[id] = (uint8_t)v;
+        } else if (rnd01(s) < a) {              /* with depth: anywhere in its range */
+            float r = rnd01(s);
+            if (rnd_short(id))
+                r *= r;
+            if (id == CR_AS)
+                r = 0.3f + 0.7f * r;            /* the amp held open enough to hear */
+            p->p[id] = (uint8_t)(r * 127.f + 0.5f);
         } else {                                /* an offset from the preset: mostly small, now and then bigger */
             float r = rnd01(s) * 2.f - 1.f, span = (rnd01(s) < 0.2f ? 0.6f : 0.25f) * 127.f, o = r * span;
             int32_t v = (int32_t)p->p[id] + (int32_t)(o < 0.f ? o - 0.5f : o + 0.5f);
             p->p[id] = (uint8_t)(v < 0 ? 0 : v > 127 ? 127 : v);
         }
+    }
+    /* its name says what it is: "RND " and the preset's ("RND SYNC SW") */
+    for (i = 0; i < 11u && p->name[i]; i++)
+        nm[i] = p->name[i];
+    nm[i] = 0;
+    if (!(nm[0] == 'R' && nm[1] == 'N' && nm[2] == 'D' && nm[3] == ' ')) {
+        p->name[0] = 'R';
+        p->name[1] = 'N';
+        p->name[2] = 'D';
+        p->name[3] = ' ';
+        for (i = 0; i < 7u && nm[i]; i++)
+            p->name[4 + i] = nm[i];
+        for (i += 4u; i < 12u; i++)
+            p->name[i] = 0;
     }
 }

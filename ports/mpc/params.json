@@ -91,7 +91,8 @@
   {"key": "random", "name": "RANDOM", "min": 0, "max": 1, "default": 0, "type": "trigger", "momentary": true},
   {"key": "rkeep", "name": "RND TABLES", "options": ["NEW", "KEEP"], "default": 0},
   {"key": "w1shown", "name": "VIEW 1", "options": ["USER", "ANALOGUE", "DIGITAL 1", "MATH", "POLYGON", "CURATED 1", "FORMANT", "DIGITAL 2", "CURATED 2"], "default": 1},
-  {"key": "w2shown", "name": "VIEW 2", "options": ["USER", "ANALOGUE", "DIGITAL 1", "MATH", "POLYGON", "CURATED 1", "FORMANT", "DIGITAL 2", "CURATED 2", "SINE/NOISE"], "default": 1}
+  {"key": "w2shown", "name": "VIEW 2", "options": ["USER", "ANALOGUE", "DIGITAL 1", "MATH", "POLYGON", "CURATED 1", "FORMANT", "DIGITAL 2", "CURATED 2", "SINE/NOISE"], "default": 1},
+  {"key": "rdepth", "name": "RND DEPTH", "min": 0, "max": 127, "default": 32, "dynamic_display": true}
  ],
  "sections": [
   {"label": "OSC A", "keys": ["w1pos", "w1bank", "omamt", "ommode", "mix", "spread", "glide", "oct"]},
@@ -109,7 +110,7 @@
   {"label": "DELAY", "keys": ["dmix", "dtime", "dfb", "dsync"]},
   {"label": "MOD FX", "keys": ["chmix", "chrate", "phmix", "phrate"]},
   {"label": "CRUSH", "keys": ["era", "crush", "ott"]},
-  {"label": "PRESET", "keys": ["pbank", "pslot", "preset", "random", "rkeep"]},
+  {"label": "PRESET", "keys": ["pbank", "pslot", "preset", "random", "rkeep", "rdepth"]},
   {"label": "ARP-SEQ", "keys": ["arp", "tempo", "arprate"]}
  ]
 }

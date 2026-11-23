@@ -127,10 +127,14 @@ int cr_dest_ok(uint32_t src, uint32_t dst);            /* LFOs and the mod envel
 
 /* 0.13: Random Patch, the same on every version (and the Twisted Tracker's CRAFTY). The host picks the preset
  * (cr_rand_slot: never an empty user slot, saved() says which hold a patch, or 0: all), loads it into p, then
- * cr_patch_random varies it. CR_RAND_KEEP_TABLES keeps cur's banks (cur may be 0: the preset's), else both waves
+ * cr_patch_random varies it and names it "RND " + the preset's name. depth 0..127: 0 is the Tracker's rules (values
+ * pushed a little), 127 sends every value anywhere and changes nearly every switch. umask: the user banks in use (bit
+ * u = USER u + 1), which a new bank comes from half the time (0: factory banks only). CR_RAND_KEEP_TABLES keeps cur's
+ * banks (cur may be 0: the preset's), else both waves
  * get a random factory bank. *s is the generator's state (any value; 0 is fine). */
 #define CR_RAND_KEEP_TABLES 1u
 uint32_t cr_rand(uint32_t *s);
 uint32_t cr_rand_slot(uint32_t *s, int (*saved)(void *ctx, uint32_t slot), void *ctx);
-void cr_patch_random(cr_patch_t *p, const cr_patch_t *cur, uint32_t *s, uint32_t flags);
+void cr_patch_random(cr_patch_t *p, const cr_patch_t *cur, uint32_t *s, uint32_t flags, uint32_t depth,
+                     uint32_t umask);
 int cr_rand_keeps(uint32_t id);                        /* a value Random Patch leaves alone */

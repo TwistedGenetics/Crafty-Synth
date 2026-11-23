@@ -36,6 +36,7 @@ typedef struct {
     char fpath[2][CR_TABLES_PATH];              /*   ... their paths (kept when missing: the project finds them later) */
     int16_t waves[2][5][CR_WT_N];
     int rkeep;                                  /* RANDOM keeps the tables */
+    uint32_t rdepth;                            /* RANDOM's depth, 0..127 (0.16) */
     int tpos[2];                                /* table1 / table2 as last reported (-1: not yet) */
     int shown[2];                               /* the 3D views' bank as last reported (w1shown, w2shown; -1: not yet) */
     uint32_t seed;
@@ -164,7 +165,7 @@ static void random_patch(mpc_t *m)
     if (!m->seed)
         m->seed = (uint32_t)time(0) * 2654435761u + (uint32_t)(uintptr_t)m;
     (void)cr_preset_get(m->user, cr_rand_slot(&m->seed, saved_slot, m), &t);
-    cr_patch_random(&t, &m->in.p, &m->seed, m->rkeep ? CR_RAND_KEEP_TABLES : 0u);
+    cr_patch_random(&t, &m->in.p, &m->seed, m->rkeep ? CR_RAND_KEEP_TABLES : 0u, m->rdepth, 0u);
     cr_inst_all_off(&m->in);
     cr_inst_use(&m->in, &t);
     m->in.dirty = 1;
@@ -222,6 +223,7 @@ static void *create(const char *dir)
     tabs_scan(dir);
     m->shown[0] = m->shown[1] = -1;
     m->tpos[0] = m->tpos[1] = -1;
+    m->rdepth = 32u;
     return m;
 }
 static void destroy(void *p) { free(p); }
@@ -335,6 +337,11 @@ static void set_param(void *p, const char *key, const char *val)
         m->rkeep = atoi(val) == 1;
         return;
     }
+    if (!strcmp(key, "rdepth")) {
+        int v = (int)(atof(val) + 0.5);
+        m->rdepth = (uint32_t)(v < 0 ? 0 : v > 127 ? 127 : v);
+        return;
+    }
     if (!strcmp(key, "preset")) {
         int n = (int)(atof(val) + 0.5);
         if (n >= 0 && n < (int)CR_NPRESET && n != m->in.cur) {
@@ -384,6 +391,10 @@ static int get_param(void *p, const char *key, char *buf, int n)
         return snprintf(buf, (size_t)n, "%d", shown_of(m, key[1] - '1'));
     if (!strcmp(key, "rkeep"))
         return snprintf(buf, (size_t)n, "%d", m->rkeep);
+    if (!strcmp(key, "rdepth"))
+        return snprintf(buf, (size_t)n, "%u", (unsigned)m->rdepth);
+    if (!strcmp(key, "rdepth_display"))
+        return snprintf(buf, (size_t)n, "%u%%", (unsigned)((m->rdepth * 100u + 63u) / 127u));
     if (!strcmp(key, "pbank"))
         return snprintf(buf, (size_t)n, "%d", m->in.cur / 8);
     if (!strcmp(key, "pslot"))

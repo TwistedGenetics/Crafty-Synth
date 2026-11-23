@@ -37,7 +37,7 @@ static const char *const SECTIONS[][9] = {
     {"DELAY", "DMIX", "DTIME", "DFB", "DSYNC", 0},
     {"MOD FX", "CHMIX", "CHRATE", "PHMIX", "PHRATE", 0},
     {"CRUSH", "ERA", "CRUSH", "OTT", 0},
-    {"PRESET", "@pbank", "@pslot", "@preset", "@random", "@rkeep", 0},
+    {"PRESET", "@pbank", "@pslot", "@preset", "@random", "@rkeep", "@rdepth", 0},
     {"ARP-SEQ", "ARP", "TEMPO", "ARPRATE", 0},
 };
 
@@ -104,6 +104,9 @@ int main(void)
     printf(",\n  {\"key\": \"random\", \"name\": \"RANDOM\", \"min\": 0, \"max\": 1, \"default\": 0, \"type\": \"trigger\", "
            "\"momentary\": true}");
     printf(",\n  {\"key\": \"rkeep\", \"name\": \"RND TABLES\", \"options\": [\"NEW\", \"KEEP\"], \"default\": 0}");
+    /* 0.16: RANDOM's depth (0: the Tracker's light touch .. 127: anything) */
+    printf(",\n  {\"key\": \"rdepth\", \"name\": \"RND DEPTH\", \"min\": 0, \"max\": 127, \"default\": 32, "
+           "\"dynamic_display\": true}");
     /* the 3D wavetable views (make_port.py's OSC page): which bank each oscillator shows, set by the engine
      * (0: a user bank or a wavetable file, 1..: factory bank n - 1); no control, the views follow it */
     for (k = 1; k <= 2; k++) {

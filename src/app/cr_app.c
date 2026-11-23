@@ -17,7 +17,8 @@
  *   LFO        LFO 1 -> LFO 2; held while turning a knob: LFO assign (the CRAFTsynth's hold-LFO)
  *   SEL        MATRIX; held while turning a knob: MOD EG assign
  *   FX         DIST + DELAY -> OUTPUT      ARP  arp on / off (and its page)     SEQ  the pattern page
- *   REC        LATCH (on SAVE: RANDOM)   PLAY  all notes off (on SAVE: INIT)    GLO  global pages      SAVE  save
+ *   REC        LATCH (RANDOM / SAVE pages: RANDOM)   PLAY  all notes off (on SAVE: INIT)   PLAY + REC  RANDOM
+ *   GLO        global pages      SAVE  save
  * Copyright (C) 2026 Jamie (TwistedGenetics). */
 #include "cr_app.h"
 #include "cr_presets.h"
@@ -56,13 +57,14 @@ static volatile uint8_t cr_clock_seen;
 static volatile float cr_clock_bpm;
 
 enum { PG_OSC, PG_WAVES, PG_OSCB, PG_TUNE, PG_SUB, PG_FILTER, PG_FEG, PG_AEG, PG_MEG, PG_LFO1, PG_LFO2, PG_MATRIX, PG_FX,
-       PG_OUT, PG_SPACE, PG_SPACE2, PG_COLOUR, PG_CRUSH, PG_ARP, PG_SEQ, PG_GLOB, PG_GLOB2, PG_GLOB3, PG_SAVE, PG_N };
+       PG_OUT, PG_SPACE, PG_SPACE2, PG_COLOUR, PG_CRUSH, PG_ARP, PG_SEQ, PG_GLOB, PG_GLOB2, PG_GLOB3, PG_RAND, PG_SAVE,
+       PG_N };
 static const char *const CR_PG_NAME[PG_N] = {"OSC", "WAVES", "OSC B", "TUNE", "SUB", "FILTER", "FILTER EG", "AMP EG",
     "MOD EG", "LFO 1", "LFO 2", "MATRIX", "FX", "OUTPUT", "REVERB", "REVERB 2", "MOD FX", "CRUSH", "ARP", "SEQ",
-    "MIDI", "KEYS", "SETUP", "SAVE"};
+    "MIDI", "KEYS", "SETUP", "RANDOM", "SAVE"};
 /* the page's four knobs: a patch parameter, or one of the G_ values (globals and page controls) */
 enum { G_NONE = 100, G_MSRC, G_MDST, G_MDEP, G_STEPS, G_MCH, G_MIN, G_CLOCK, G_BEND, G_KEYS, G_SCALE, G_ROOT,
-       G_VELO, G_LOCAL, G_BREATH, G_ARPOUT, G_SLOT, G_CPOS, G_CHAR, G_THEME, G_RTAB };
+       G_VELO, G_LOCAL, G_BREATH, G_ARPOUT, G_SLOT, G_CPOS, G_CHAR, G_THEME, G_RTAB, G_RDEPTH, G_RUSER };
 static const uint8_t CR_PAGE_P[PG_N][4] = {
     {CR_W1POS, CR_W2POS, CR_MIX, CR_OMAMT},   {CR_W1BANK, CR_W2BANK, CR_OMMODE, CR_SPREAD},
     {CR_BMODE, CR_BAMT, CR_W2POS, CR_TUNE},   {CR_TUNE, CR_FINE, CR_OCT, CR_GLIDE},
@@ -76,20 +78,23 @@ static const uint8_t CR_PAGE_P[PG_N][4] = {
     {CR_CHMIX, CR_CHRATE, CR_PHMIX, CR_PHRATE}, {CR_ERA, CR_CRUSH, CR_OTT, CR_DIST},
     {CR_ARP, CR_TEMPO, CR_ARPRATE, G_STEPS},  {G_STEPS, CR_TEMPO, CR_ARPRATE, CR_ARP},
     {G_MCH, G_MIN, G_CLOCK, G_BEND},          {G_KEYS, G_SCALE, G_ROOT, G_VELO},
-    {G_LOCAL, G_BREATH, G_ARPOUT, G_THEME},    {G_SLOT, G_RTAB, G_CPOS, G_CHAR},
+    {G_LOCAL, G_BREATH, G_ARPOUT, G_THEME},
+    {G_RDEPTH, G_RTAB, G_RUSER, G_NONE},     {G_SLOT, G_RTAB, G_CPOS, G_CHAR},
 };
 static uint32_t cr_page = PG_OSC;
 static uint32_t cr_ver = 1, cr_drawn;            /* the screen redraws when cr_ver moves on */
 static char cr_msg[28];
 static uint32_t cr_msg_until;
-static int32_t cr_hit = -1;                      /* the knob turned last: its value shown big */
+static int32_t cr_hit = -1;                      /* the knob turned last: its cell lit (0.16: no big number) */
 static uint32_t cr_hit_p, cr_hit_until;
 static uint32_t cr_keys_prev, cr_btn_prev, cr_btn_used, cr_keys_down;
 static int32_t cr_oct;                           /* the keys' octave, -3..3 */
 static uint8_t cr_latch, cr_lat_on[16], cr_lat_n; /* LATCH: the notes kept sounding */
 static uint32_t cr_msrc;                         /* MATRIX: the slot (source) shown */
 static uint32_t cr_save_slot, cr_cpos;
-static uint32_t cr_rand_keep, cr_seed;          /* SAVE: RANDOM keeps the banks; the generator */
+static uint32_t cr_rand_keep, cr_seed;          /* RANDOM keeps the banks; the generator */
+static uint32_t cr_rand_depth = 32u, cr_rand_user = 1u;   /* RANDOM's depth (0..127) and whether it picks your banks */
+static uint32_t cr_rand_from = 0xFFFFu;          /* the preset the last random patch came from */
 static uint8_t cr_sus;                           /* MIDI sustain pedal */
 static uint32_t cr_sus_bits[4];
 static uint8_t cr_key_note[27];                  /* the note each key started (so OCT moves don't hang notes) */
@@ -450,6 +455,8 @@ static const char *cr_plabel(uint32_t p)
     case G_CHAR: return "CHAR";
     case G_THEME: return "THEME";
     case G_RTAB: return "TABLES";
+    case G_RDEPTH: return "DEPTH";
+    case G_RUSER: return "USER WT";
     default: return p < CR_NP ? CR_P[p].name : "";
     }
 }
@@ -484,6 +491,8 @@ static void cr_ptext(uint32_t p, char *b, int lng)
         case G_SLOT: cr_preset_label(cr_save_slot, b); break;
         case G_CPOS: cr_num(b, (int32_t)cr_cpos + 1, 0); break;
         case G_RTAB: cr_cpy(b, cr_rand_keep ? "KEEP" : "NEW"); break;
+        case G_RDEPTH: cr_num(b, (int32_t)((cr_rand_depth * 100u + 63u) / 127u), 0); cr_cat(b, "%"); break;
+        case G_RUSER: cr_cpy(b, cr_rand_user ? "ON" : "OFF"); break;
         case G_THEME: cr_cpy(b, CR_THEMES[cr_g.theme % CR_NTHEME].name); if (!lng) b[5] = 0; break;
         case G_CHAR: b[0] = cr_p.name[cr_cpos] ? cr_p.name[cr_cpos] : '_'; b[1] = 0; if (b[0] == ' ') cr_cpy(b, "SPC"); break;
         default: break;
@@ -615,6 +624,8 @@ static void cr_gturn(uint32_t p, int32_t d)
     case G_SLOT: cr_save_slot = (uint32_t)lim32((int32_t)cr_save_slot + d, CR_NFACTORY, CR_NPRESET - 1); break;
     case G_CPOS: cr_cpos = (uint32_t)lim32((int32_t)cr_cpos + d, 0, 10); break;
     case G_RTAB: cr_rand_keep = d > 0; break;
+    case G_RDEPTH: cr_rand_depth = (uint32_t)lim32((int32_t)cr_rand_depth + d, 0, 127); break;
+    case G_RUSER: cr_rand_user = d > 0; break;
     case G_CHAR: {
         static const char cs[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+/#&";
         int32_t i = 0, n = (int32_t)sizeof cs - 1;
@@ -695,6 +706,24 @@ static void cr_cycle(uint32_t a, uint32_t b, uint32_t c)
     cr_go(cr_page == a ? b : cr_page == b && c != b ? c : a);
 }
 
+/* RANDOM (the RANDOM and SAVE pages' REC, or PLAY + REC anywhere): a preset, varied (src/core cr_patch_random) */
+static void cr_random(void)
+{
+    static cr_patch_t t;
+    uint32_t u, um = 0;
+    if (!cr_seed)
+        cr_seed = plat_ms() * 2654435761u + cr_keys_down + 1u;
+    for (u = 0; cr_rand_user && u < CR_NUBANK; u++)
+        if (cr_ubank(u))
+            um |= 1u << u;
+    cr_rand_from = cr_rand_slot(&cr_seed, cr_rand_saved, 0);
+    cr_preset_read(cr_rand_from, &t);
+    cr_patch_random(&t, &cr_p, &cr_seed, cr_rand_keep ? CR_RAND_KEEP_TABLES : 0u, cr_rand_depth, um);
+    cr_use(&t);
+    cr_dirty = 1;
+    cr_flash("RANDOM PATCH");
+}
+
 static void cr_button(uint32_t b)                /* a press (LFO, SEL, ENV: a release without a knob turned) */
 {
     switch (b) {
@@ -717,15 +746,8 @@ static void cr_button(uint32_t b)                /* a press (LFO, SEL, ENV: a re
         break;
     case B_SEQ: cr_go(PG_SEQ); break;
     case B_REC:
-        if (cr_page == PG_SAVE) {                /* RANDOM: a preset, varied (src/core cr_patch_random) */
-            static cr_patch_t t;
-            if (!cr_seed)
-                cr_seed = plat_ms() * 2654435761u + cr_keys_down + 1u;
-            cr_preset_read(cr_rand_slot(&cr_seed, cr_rand_saved, 0), &t);
-            cr_patch_random(&t, &cr_p, &cr_seed, cr_rand_keep ? CR_RAND_KEEP_TABLES : 0u);
-            cr_use(&t);
-            cr_dirty = 1;
-            cr_flash("RANDOM PATCH");
+        if (cr_page == PG_SAVE || cr_page == PG_RAND) {
+            cr_random();
             break;
         }
         cr_latch ^= 1u;
@@ -848,6 +870,10 @@ void cr_app_input(void)
                         cr_p.step[cr_p.steps++] = CR_REST;
                     cr_dirty = 1;
                     cr_touch();
+                    continue;
+                }
+                if (k == B_REC && (btn & (1u << B_PLAY))) {     /* PLAY + REC, on any page: RANDOM */
+                    cr_random();
                     continue;
                 }
                 if (k == B_PLAY && (btn & (1u << B_SEQ))) {     /* SEQ + PLAY: the pattern cleared */
@@ -1198,6 +1224,152 @@ static void cr_draw_sub(int32_t x, int32_t y, int32_t w, int32_t h)
     sx_text(x + w - 2 - text_w(&FONT_M, b), y, &FONT_M, b, lv > 0.f ? t->acc2 : t->soft);
 }
 
+/* ---- 0.16: every page draws what its knobs do, live as they turn (no big number in the way) ---- */
+static float cr_v(uint32_t p) { return (float)cr_p.p[p] / 127.f; }
+
+/* FX: the distortion's curve, then the delay's echoes (spaced by its time, each one quieter by its feedback) */
+static void cr_draw_fx(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    const cr_theme_t *t = cr_th();
+    float drive = 1.f + cr_v(CR_DIST) * 14.f, nrm = cr_tanh(drive), amp = cr_v(CR_DMIX), fb = cr_v(CR_DFB) * 0.92f;
+    int32_t cw = 70, i, py = 0, gap = 6 + (int32_t)(cr_v(CR_DTIME) * 36.f), xx;
+    sx_line(x, y + h / 2, x + cw, y + h / 2, t->line);
+    sx_line(x + cw / 2, y, x + cw / 2, y + h, t->line);
+    for (i = 0; i <= cw; i++) {
+        float in = (float)i / (float)cw * 2.f - 1.f, o = cr_tanh(in * drive) / nrm;
+        int32_t yy = y + h / 2 - (int32_t)(o * (float)h * 0.45f);
+        if (i)
+            sx_thick(x + i - 1, py, x + i, yy, t->acc);
+        py = yy;
+    }
+    sx_text(x, y + h - 16, &FONT_S, "DIST", t->soft);
+    x += cw + 18;
+    w -= cw + 18;
+    sx_line(x, y + h, x + w, y + h, t->line);
+    sx_rect(x, y + 4, 5, h - 4, t->ink);         /* the note itself */
+    for (xx = x + gap; xx + 5 <= x + w && amp > 0.02f; xx += gap) {
+        int32_t bh = (int32_t)((float)(h - 4) * amp);
+        if (bh < 2)
+            break;
+        sx_rect(xx, y + h - bh, 5, bh, t->acc);
+        amp *= fb;
+    }
+    sx_text(x + w - text_w(&FONT_S, "DELAY"), y, &FONT_S, "DELAY", t->soft);
+}
+
+/* REVERB / REVERB 2: the tail, its build-up from the size, its length from the decay, as loud as its mix, grainier
+ * with less density */
+static void cr_draw_verb(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    const cr_theme_t *t = cr_th();
+    const char *mode = CR_VMODE_NAME[cr_band(cr_p.p[CR_VMODE], 6u)];
+    float len = (0.2f + 0.8f * cr_v(CR_VDECAY)) * (float)(w - 10), rise = (0.03f + 0.25f * cr_v(CR_VSIZE)) * len;
+    float amp = 0.15f + 0.85f * cr_v(CR_VMIX), grain = 1.f - cr_v(CR_VDENS);
+    uint32_t r = 0x2545F491u;
+    int32_t i;
+    sx_line(x, y + h, x + w, y + h, t->line);
+    sx_rect(x, y + 10, 4, h - 10, t->ink);       /* the dry sound */
+    for (i = 0; i < w - 8; i++) {
+        float f = (float)i, e = f < rise ? f / rise : cr_exp2f(-(f - rise) / (len * 0.18f));
+        int32_t bh;
+        r ^= r << 13;
+        r ^= r >> 17;
+        r ^= r << 5;
+        e *= 1.f - grain * 0.7f * (float)(r & 255u) / 255.f;
+        bh = (int32_t)(e * amp * (float)(h - 12));
+        if (bh > 0)
+            sx_line(x + 8 + i, y + h - bh, x + 8 + i, y + h, i % 2 ? cr_mix(t->panel, t->acc, 150u) : t->acc);
+    }
+    sx_text(x + w - text_w(&FONT_M, mode), y, &FONT_M, mode, t->ink);
+}
+
+/* MOD FX: the chorus's and the phaser's sweeps, as fast as their rates, as deep as their amounts */
+static void cr_draw_modfx(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    const cr_theme_t *t = cr_th();
+    uint32_t k;
+    for (k = 0; k < 2u; k++) {
+        float cyc = 1.f + (k ? cr_v(CR_PHRATE) : cr_v(CR_CHRATE)) * 5.f, a = k ? cr_v(CR_PHMIX) : cr_v(CR_CHMIX);
+        int32_t mid = y + (int32_t)k * h / 2 + h / 4 + 6, i, py = mid;
+        uint16_t col = k ? t->acc2 : t->acc;
+        sx_text(x, y + (int32_t)k * h / 2, &FONT_S, k ? "PHASER" : "CHORUS", t->soft);
+        sx_line(x + 64, mid, x + w, mid, t->line);
+        for (i = 0; i <= w - 64; i++) {
+            float ph = (float)i / (float)(w - 64) * cyc;
+            int32_t yy = mid - (int32_t)(cr_sin_turn(ph - (float)(int32_t)ph) * a * (float)(h / 4 - 4));
+            if (i)
+                sx_thick(x + 64 + i - 1, py, x + 64 + i, yy, col);
+            py = yy;
+        }
+    }
+}
+
+/* CRUSH: a sine through the era's sampler: fewer levels and longer steps as CRUSH rises (smooth when OFF) */
+static void cr_draw_crush(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    const cr_theme_t *t = cr_th();
+    uint32_t era = cr_band(cr_p.p[CR_ERA], 6u);
+    float c = era ? cr_v(CR_CRUSH) : 0.f, lv = 2.f + (1.f - c) * (1.f - c) * 40.f, hold = 0.f;
+    int32_t mid = y + h / 2 + 8, i, py = mid, step = 1 + (int32_t)(c * 16.f);
+    sx_line(x, mid, x + w, mid, t->line);
+    for (i = 0; i <= w; i++) {
+        float ph = (float)i / (float)w * 2.f;
+        int32_t yy;
+        if (i % step == 0) {
+            float v = cr_sin_turn(ph - (float)(int32_t)ph) * lv;
+            hold = (float)(int32_t)(v + (v < 0.f ? -0.5f : 0.5f)) / lv;
+        }
+        yy = mid - (int32_t)(hold * (float)(h / 2 - 12));
+        sx_line(x + i, mid, x + i, yy, cr_mix(t->panel, t->acc, 70u));
+        if (i)
+            sx_thick(x + i - 1, py, x + i, yy, t->acc);
+        py = yy;
+    }
+    sx_text(x, y, &FONT_M, CR_ERA_NAME[era], t->ink);
+}
+
+/* a page with nothing to draw: its four values as rows, each with a bar where it has one (no big number) */
+static float cr_knob_pos(uint32_t p, int *bip);
+static void cr_draw_rows(int32_t x, int32_t y, int32_t w)
+{
+    const cr_theme_t *t = cr_th();
+    char b[40];
+    uint32_t i;
+    for (i = 0; i < 4u; i++) {
+        uint32_t p = CR_PAGE_P[cr_page][i];
+        int32_t yy = y + (int32_t)i * 26;
+        int bip;
+        float v;
+        if (p == G_NONE)
+            continue;
+        sx_text(x, yy + 2, &FONT_S, cr_plabel(p), t->soft);
+        cr_ptext(p, b, 0);
+        sx_text(x + w - text_w(&FONT_M, b), yy, &FONT_M, b, t->ink);
+        v = cr_knob_pos(p, &bip);
+        if (v >= 0.f) {
+            int32_t bx = x + 74, bw = w - 74 - 62;
+            sx_round(bx, yy + 7, bw, 8, t->track);
+            sx_round(bx, yy + 7, 2 + (int32_t)(v * (float)(bw - 2)), 8, t->acc);
+        }
+    }
+}
+
+/* RANDOM: what REC does here and anywhere, and where the last one came from */
+static void cr_draw_rand(void)
+{
+    const cr_theme_t *t = cr_th();
+    char b[24];
+    sx_center(4, 232, 42, &FONT_M, "REC: A NEW PATCH", t->ink);
+    sx_center(4, 232, 70, &FONT_S, "PLAY + REC ON ANY PAGE", t->soft);
+    if (cr_rand_from < CR_NPRESET) {
+        cr_cpy(b, "FROM ");
+        cr_preset_label(cr_rand_from, b + 5);
+        sx_center(4, 232, 94, &FONT_M, b, t->acc);
+    }
+    sx_round(24, 126, 192, 10, t->track);
+    sx_round(24, 126, 4 + (int32_t)(cr_rand_depth * 188u / 127u), 10, t->acc);
+}
+
 /* where a parameter's value sits on its knob (0..1), and whether it is bipolar */
 static float cr_knob_pos(uint32_t p, int *bip)
 {
@@ -1215,6 +1387,8 @@ static float cr_knob_pos(uint32_t p, int *bip)
             return (float)cr_p.steps / 16.f;
         if (p == G_THEME)
             return (float)(cr_g.theme % CR_NTHEME) / (float)(CR_NTHEME - 1u);
+        if (p == G_RDEPTH)
+            return (float)cr_rand_depth / 127.f;
         return -1.f;                             /* no knob: the value alone */
     }
     if (CR_P[p].kind == CR_K_DEST)
@@ -1247,12 +1421,7 @@ static void cr_screen(void)
     if (cr_msg[0]) {
         sx_round(4, 36, 232, 110, t->hil);
         sx_center(4, 232, 76, cr_fit(cr_msg, 228), cr_msg, t->ink);
-    } else if (cr_hit >= 0) {
-        sx_round(4, 36, 232, 110, t->panel);
-        sx_center(4, 232, 46, &FONT_M, cr_plabel(cr_hit_p), t->soft);
-        cr_ptext(cr_hit_p, b, 1);
-        sx_center(4, 232, 80, text_w(&FONT_XL, b) <= 228 ? &FONT_XL : &FONT_M, b, t->ink);
-    } else if (cr_page <= PG_TUNE) {             /* OSC A and OSC B, Serum's way */
+    } else if (cr_page <= PG_TUNE || (cr_hit_p == CR_OMMODE && cr_hit >= 0)) {   /* (ALGO turned: the oscillators) */             /* OSC A and OSC B, Serum's way */
         uint32_t k;
         for (k = 0; k < 2u; k++) {
             int32_t x = 4 + (int32_t)k * 118;
@@ -1309,7 +1478,17 @@ static void cr_screen(void)
                 } else
                     sx_round(x, y, 26, 40, i < cr_p.steps ? t->line : t->track);
             }
-        } else if (cr_page == PG_GLOB3) {        /* the audio's load, to see how far the effects go */
+        } else if (cr_page == PG_FX)
+            cr_draw_fx(14, 44, 212, 94);
+        else if (cr_page == PG_SPACE || cr_page == PG_SPACE2)
+            cr_draw_verb(12, 42, 216, 98);
+        else if (cr_page == PG_COLOUR)
+            cr_draw_modfx(12, 40, 216, 104);
+        else if (cr_page == PG_CRUSH)
+            cr_draw_crush(12, 40, 216, 102);
+        else if (cr_page == PG_RAND)
+            cr_draw_rand();
+        else if (cr_page == PG_GLOB3) {        /* the audio's load, to see how far the effects go */
             cr_cpy(b, "CPU ");
             cr_num(b + 4, (int32_t)plat_cpu_pct(), 0);
             cr_cat(b, "%");
@@ -1326,11 +1505,8 @@ static void cr_screen(void)
                 sx_center(x, 19, 74, &FONT_M, c, t->ink);
             }
             sx_center(4, 232, 116, &FONT_S, "PLAY: INIT     REC: RANDOM", t->soft);
-        } else {
-            cr_ptext(CR_PAGE_P[cr_page][0], b, 1);
-            sx_center(4, 232, 46, &FONT_M, cr_plabel(CR_PAGE_P[cr_page][0]), t->soft);
-            sx_center(4, 232, 80, text_w(&FONT_XL, b) <= 228 ? &FONT_XL : &FONT_M, b, t->ink);
-        }
+        } else
+            cr_draw_rows(12, 40, 216);              /* OUTPUT, ARP, MIDI, KEYS */
     }
     /* ---- the knobs (150..240) ---- */
     sx_rect(0, 150, 240, 90, t->bar);

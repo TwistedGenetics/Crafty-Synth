@@ -47,8 +47,9 @@ the lower panels). It is always connected: the preset list,
   bank lists hold the factory banks only, and the 32-slot importer is gone from the plugin window. Every file gets a number for good in `TableIndex.txt` next to the folder, the Tracker's and the MPC's format:
   copy both between them and the numbers match. The project keeps the file by its path. A file plays as the five
   waves the importer picks (evenly through the table); the matrix can't move a file as it moves a bank.
-- **RANDOM** picks a preset and varies it (the FM-1's rules, docs/MANUAL.md); half the time each oscillator also gets
-  one of your wavetable files. Shift-click keeps the banks and files you have.
+- **RANDOM** picks a preset and varies it by **DEPTH** (the slider beside it), names it RND + the preset's name (the
+  FM-1's rules, docs/MANUAL.md); half the time each oscillator also gets one of your wavetable files. Shift-click keeps
+  the banks and files you have.
 
 ## MPC
 
@@ -80,7 +81,8 @@ A project saved on one MPC opens on any other.
 | MOD | the mod envelope · LFO 1 · LFO 2 (rate, shape, mode, sync) |
 | MATRIX | one destination and depth per source (LFO 1 - NOTE, then VELO - AFTTCH) |
 | FX | the Horizon reverb (mode, size, decay, mix, warp, density, mod) · the delay · chorus, phaser |
-| PRESET | era, crush, OTT · bank, slot, preset, RANDOM, RND TABLES · arp, tempo, rate |
+| PRESET | era, crush, OTT · bank, slot, preset, RANDOM, RND TABLES, RND DEPTH |
+| ARP | arp, tempo, rate |
 
 **The look** (0.14) is the editor's and the plugin window's: the SERUM colours, rounded panels, each control in its
 own cell, the same knobs. The 3D view shows the bank playing (a user bank or a table file shows YOUR WAVETABLE: its
@@ -96,8 +98,9 @@ waves are only known on the MPC) and follows WT POS in 16 steps; touching it mov
   on the OSC page steps through them in name order, folders together (0: the bank), and plays the one shown in place of
   that oscillator's bank; the bank lists hold the factory banks only. The project keeps the file by its path. Files you
   add are picked up as you browse (at most every 20 s). `data/TableIndex.txt` numbers them as the Tracker and the Mac do.
-- **RANDOM** (a button on the PRESET page) picks a preset and varies it, as the FM-1's; **RND TABLES** = KEEP leaves
-  the banks and files alone, NEW gives each oscillator a random factory bank and, half the time, one of your files.
+- **RANDOM** (a button on the PRESET page) picks a preset and varies it, as the FM-1's, by **RND DEPTH**; **RND TABLES** =
+  KEEP leaves the banks and files alone, NEW gives each oscillator a random factory bank and, half the time, one of your
+  files.
 - **The arp-seq follows the MPC's tempo and transport.** The MPC project keeps the patch.
 
 ## How it's built

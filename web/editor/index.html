@@ -19,7 +19,10 @@
   </div>
   <div class="tools">
     <button id="init">INIT</button>
-    <button id="random" title="A random preset, varied. Shift-click keeps the wavetables.">RANDOM</button>
+    <button id="random" title="A random preset, varied by DEPTH. Shift-click keeps the wavetables.">RANDOM</button>
+    <label class="theme" title="How far RANDOM moves things: low keeps close to the preset, 100% sends everything anywhere">DEPTH
+      <input type="range" id="rdepth" min="0" max="127" value="32"><span id="rdepthv">25%</span></label>
+    <label class="theme" id="ruserbox" title="RANDOM may pick your user wavetable banks"><input type="checkbox" id="ruser" checked> USER WT</label>
     <label class="theme">THEME <select id="theme"></select></label>
     <button id="audio" class="go">SOUND ON</button>
     <div class="meter" title="Output level"><div id="meter"></div></div>

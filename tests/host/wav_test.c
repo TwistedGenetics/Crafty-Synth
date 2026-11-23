@@ -71,7 +71,7 @@ int main(int argc, char **argv)
             cur = p;
             cur.p[CR_W1BANK] = 77;
             cur.p[CR_W2BANK] = 99;
-            cr_patch_random(&p, &cur, &s, t & 1u ? CR_RAND_KEEP_TABLES : 0u);
+            cr_patch_random(&p, &cur, &s, t & 1u ? CR_RAND_KEEP_TABLES : 0u, 0u, 0u);
             for (id = 0; id < CR_NP; id++) {
                 if (cr_rand_keeps(id))
                     CHECK(p.p[id] == q.p[id], "kept value %u changed", id);
@@ -90,10 +90,31 @@ int main(int argc, char **argv)
                 banks_factory = 0;
             if (p.p[CR_CUT] != q.p[CR_CUT])
                 moved++;
-            CHECK(memcmp(p.name, q.name, 12) == 0 && p.steps == q.steps, "the name or pattern changed");
+            CHECK(!memcmp(p.name, "RND ", 4) && !memcmp(p.name + 4, q.name, 7) && p.steps == q.steps,
+                  "the name (%.12s from %.12s) or pattern", p.name, q.name);
         }
         CHECK(banks_factory, "a random bank wasn't a factory one");
         CHECK(moved > 1500u, "cutoff moved only %u times in 2000", moved);
+        {   /* full depth: nearly everything moves; user banks come in when there are some */
+            cr_patch_t p, q;
+            uint32_t ch = 0, user = 0, n;
+            for (n = 0; n < 200u; n++) {
+                memcpy(&p, CR_FACTORY[n % CR_NFACTORY], sizeof p);
+                (void)cr_patch_check(&p);
+                q = p;
+                cr_patch_random(&p, 0, &s, 0u, 127u, 0x5u);
+                for (id = 0; id < CR_NP; id++)
+                    ch += p.p[id] != q.p[id];
+                user += cr_bank_of(p.p[CR_W1BANK], 0) == CR_NBANK || cr_bank_of(p.p[CR_W1BANK], 0) == CR_NBANK + 2u;
+                CHECK(cr_bank_of(p.p[CR_W1BANK], 0) < 8u || cr_bank_of(p.p[CR_W1BANK], 0) == CR_NBANK ||
+                      cr_bank_of(p.p[CR_W1BANK], 0) == CR_NBANK + 2u, "bank %u", cr_bank_of(p.p[CR_W1BANK], 0));
+                CHECK(p.p[CR_AS] >= 30u || cr_rand_keeps(CR_AS), "amp sustain %u at full depth", p.p[CR_AS]);
+                cr_patch_random(&p, 0, &s, 0u, 127u, 0u);
+                CHECK(!memcmp(p.name, "RND ", 4) && memcmp(p.name + 4, "RND ", 4), "named twice: %.12s", p.name);
+            }
+            printf("random: full depth changes %.1f values a patch; %u of 200 took a user bank\n", (double)ch / 200.0, user);
+            CHECK(ch / 200u > 55u && user > 60u && user < 140u, "full depth: %u changes, %u user banks", ch / 200u, user);
+        }
         printf("random: %u values changed in 2000 patches (%.1f a patch), cutoff moved %u times\n", changed,
                (double)changed / 2000.0, moved);
     }

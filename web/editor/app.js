@@ -798,7 +798,10 @@ async function randomPatch(keep) {
   const bytes = slot < 64 ? Uint8Array.from(M.presets[slot].bytes) : (await dev.getPatch(slot)).bytes;
   new Uint8Array(wasm.memory.buffer, wasm.cw_rand_cur(), 128).set(patch);
   new Uint8Array(wasm.memory.buffer, wasm.cw_patch(), 128).set(bytes);
-  wasm.cw_rand_vary(keep ? 1 : 0);
+  let um = 0;                                     // your user banks (the FM-1's; the plugin's come from its folder)
+  if (!inPlugin && $("ruser").checked)
+    for (let u = 0; u < 32; u++) if (dev.connected ? ubankUsed[u] : ubank[u]) um |= 1 << u;
+  wasm.cw_rand_vary(keep ? 1 : 0, +$("rdepth").value, um >>> 0);
   patch.set(new Uint8Array(wasm.memory.buffer, wasm.cw_patch(), 128));
   pushPatch();
   if (inPlugin && !keep)                         // as the Tracker: half the time one of your files, else the bank
@@ -807,6 +810,7 @@ async function randomPatch(keep) {
   status(`Random patch from ${label(slot)}${keep ? ", wavetables kept" : ""}.`);
 }
 $("random").onclick = (e) => randomPatch(e.shiftKey).catch(status);
+$("rdepth").oninput = () => { $("rdepthv").textContent = `${Math.round((+$("rdepth").value * 100) / 127)}%`; };
 $("audio").onclick = (e) => { e.stopPropagation(); soundButton(); };
 $("connect").onclick = connect;
 $("save").onclick = async () => {
@@ -878,6 +882,7 @@ if (inPlugin) {
 if (inPlugin) {
   document.body.classList.add("plugin");
   $("ubanksec").hidden = true;                    // the plugin's wavetables come from its folder (TABLE FILE)
+  $("ruserbox").hidden = true;
   $("save").textContent = "SAVE";
   $("pull").textContent = "RELOAD";
   connect();

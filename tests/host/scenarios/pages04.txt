@@ -44,7 +44,7 @@ expect page 22
 wait 600
 shot p_cpu.ppm
 tap SAVE
-expect page 23
+expect page 24
 shot p_save.ppm
 tap SAVE
 expect preset 64

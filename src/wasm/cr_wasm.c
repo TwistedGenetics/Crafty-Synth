@@ -111,10 +111,9 @@ EXPORT uint8_t *cw_rand_saved(void) { return SAVED; }
 EXPORT uint8_t *cw_rand_cur(void) { return (uint8_t *)&CUR; }
 EXPORT void cw_rand_seed(uint32_t s) { SEED = s; }
 EXPORT uint32_t cw_rand_slot(void) { return cr_rand_slot(&SEED, rnd_saved, 0); }
-/* the preset in cw_patch() varied, the banks kept from cw_rand_cur() with flags 1 */
-EXPORT void cw_rand_vary(uint32_t flags)
+/* the preset in cw_patch() varied: flags 1 keeps cw_rand_cur()'s banks; depth 0..127; umask: the user banks in use */
+EXPORT void cw_rand_vary(uint32_t flags, uint32_t depth, uint32_t umask)
 {
     (void)cr_patch_check(&P);
-    cr_patch_random(&P, &CUR, &SEED, flags);
+    cr_patch_random(&P, &CUR, &SEED, flags, depth, umask);
 }
-

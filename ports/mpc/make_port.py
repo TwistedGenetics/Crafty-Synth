@@ -149,7 +149,8 @@ def cells_svg(boxes):
 
 # the MPC's tab bar: one short word a page (the long section names ran together on the MPC's buttons)
 TAB_NAMES = {"SUB OSC / FILTER": "FILTER", "FILTER EG / AMP EG": "ENVELOPE", "MOD EG / LFO 1 / LFO 2": "MOD",
-             "MATRIX LFO 1 - NOTE +1": "MATRIX", "REVERB / DELAY / MOD FX": "FX", "CRUSH / PRESET / ARP-SEQ": "PRESET"}
+             "MATRIX LFO 1 - NOTE +1": "MATRIX", "REVERB / DELAY / MOD FX": "FX", "CRUSH / PRESET / ARP-SEQ": "PRESET",
+             "CRUSH / PRESET": "PRESET", "ARP-SEQ": "ARP"}
 
 
 def short_tabs(layout):

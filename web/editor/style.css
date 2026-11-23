@@ -95,3 +95,4 @@ body.plugin .panel.wide { margin-left: 16px; margin-right: 16px; max-width: none
   transparent 69% 79%, var(--soft) 79% 86%, transparent 86%); }
 .resizer:hover { background-color: rgba(63, 169, 245, 0.25); }
 .subhead { font-weight: 700; font-size: 15px; letter-spacing: 0.06em; color: var(--ink); margin: 14px 2px 8px; }
+.theme input[type=range] { width: 90px; vertical-align: middle; accent-color: var(--acc); }

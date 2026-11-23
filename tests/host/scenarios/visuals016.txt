@@ -1,0 +1,44 @@
+# Crafty Synth 0.16: no big number over a page; each page draws what its knobs do; the RANDOM page; PLAY + REC
+wait 300
+tap HOME
+expect page 1
+turn K1 20
+wait 50
+shot p_waves_turn.ppm
+tap FX
+expect page 12
+turn K3 10
+wait 50
+shot p_fx.ppm
+tap FX
+tap FX
+expect page 14
+shot p_reverb.ppm
+tap FX
+tap FX
+expect page 16
+shot p_modfx.ppm
+tap FX
+turn K1 2
+turn K2 60
+shot p_crush.ppm
+tap FX
+tap FX
+expect page 13
+shot p_output.ppm
+turn SELECT 30
+expect page 23
+turn K1 95
+shot p_random.ppm
+tap REC
+expect page 23
+expect latch 0
+expect dirty 1
+tap HOME
+expect page 0
+press PLAY
+tap REC
+release PLAY
+expect latch 0
+wait 1600
+shot p_osc_random.ppm

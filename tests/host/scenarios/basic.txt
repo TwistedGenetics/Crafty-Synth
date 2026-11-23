@@ -109,7 +109,7 @@ tap REC
 expect gate 0
 # SAVE: a factory preset saves into the first empty user slot (U1-1); further on, rename; reboot: it is there
 tap SAVE
-expect page 23
+expect page 24
 turn PRESET 99
 turn K4 3
 shot save.ppm

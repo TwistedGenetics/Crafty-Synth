@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.16 beta (2026-11-23)
+
+- **FM-1: no big number over the screen.** Turning a knob lights its cell and the page's picture follows it live: the
+  3D wavetables slide with WT POS, the envelope, LFO, filter and sub pictures move, and the pages that only had a
+  number now have pictures too: FX (the distortion's curve, the delay's echoes), REVERB and REVERB 2 (the tail), MOD
+  FX (the chorus and phaser sweeps), CRUSH (the stepped wave); OUTPUT, ARP, MIDI and KEYS list their values with
+  bars.
+- **RANDOM, everywhere:**
+  - its patch is named **RND** + the preset's name;
+  - **DEPTH**: from the Tracker's light touch to everything anywhere (the level, amp envelope amount, arp and effect
+    tails still stay put, and the sound always speaks);
+  - **user banks**: a new bank can be one of your user banks half the time (FM-1 and the editor; USER WT on / off);
+  - FM-1: a **RANDOM page** (SELECT, after SETUP: DEPTH, TABLES, USER WT) and **PLAY + REC** on any page;
+  - editor and AU / VST3: DEPTH beside RANDOM (and USER WT in the browser); MPC: RND DEPTH on the PRESET page.
+- MPC: ARP has its own page now (PRESET filled up).
+
 ## 0.15 beta (2026-11-23)
 
 - **Your wavetables come from a folder, as on the Twisted Tracker** (AU / VST3 and MPC): the 32 user bank slots are
