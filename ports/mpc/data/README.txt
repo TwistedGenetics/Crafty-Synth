@@ -6,8 +6,10 @@ in the Crafty Synth plugin on your computer. On a Mac it is in
 Copy it here again whenever you want the MPC to have your latest ones. When you update the plugin, keep this folder
 (or copy the file in again).
 
-Your wavetables (0.15): put WAVs (Serum and Vital tables, or single cycles; sub-folders are fine) in the Wavetables
-folder here. Each oscillator's WAVETABLE box (top of the OSC page) lists the factory banks, then your files in
+Your wavetables (0.21): put WAVs (Serum and Vital tables, or single cycles; sub-folders are fine) in the shared
+  VST2 Plugins/Content/Wavetables
+folder, beside the plugin folders, the one your other Twisted Genetics instruments use (the plugin makes it the first
+time it loads). The Wavetables folder here still works too: its files come after, in a folder called "Wavetables". Each oscillator's WAVETABLE box (top of the OSC page) lists the factory banks, then your files in
 folder order: turn its Q-Link, tap its arrows, or tap LIST to see them all. Each file also gets a number for good in TableIndex.txt, the same file the Twisted Tracker's CRAFTY and the Mac plugin keep, so
 copy Wavetables and TableIndex.txt together between them and the numbers match. RANDOM (page PRESET) picks a preset
 and varies it; RND TABLES = KEEP leaves the banks and files as they are.

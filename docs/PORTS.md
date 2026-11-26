@@ -101,7 +101,9 @@ WT POS. A user bank (0.19) shows its own wave at WT POS, drawn by the engine as 
   filter types, reverb modes, matrix destinations) open as pop-ups.
 - **Your user presets**: copy `Crafty Synth.user` from your Mac (path above) into the plugin's `data`
   folder on the MPC (`VST2 Plugins/Twisted Genetics - VST - Crafty Synth/data/`).
-- **Your wavetables** (0.17): put WAVs in `data/Wavetables` (sub-folders too). Each oscillator's **WAVETABLE** box
+- **Your wavetables** (0.21): put WAVs (sub-folders too) in the shared `VST2 Plugins/Content/Wavetables`, beside the
+  plugin folders, where your other Twisted Genetics instruments look (it is made the first time the plugin loads).
+  The plugin's own `data/Wavetables` still works: its files come after, in a folder named "Wavetables". Each oscillator's **WAVETABLE** box
   (top of its panel on the OSC page) is one list: the factory banks, then your files in folder order (a folder's files
   together, "Basses / Growl"). Turn its Q-Link or tap the arrows to move through it, or tap **LIST** to see eight rows
   at a time over the panel and tap one. The project keeps a file by its path; files you add appear as you browse (at

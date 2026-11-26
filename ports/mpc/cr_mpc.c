@@ -58,26 +58,29 @@ typedef struct {
     uint32_t sus_bits[4];
     float vbuf[2 * CR_INST_FRAMES];
     uint32_t sslot;                             /* SAVE TO: a user slot, 64..191 */
-    uint8_t col[2][NCOL];
-    uint32_t picgen[2], picid[2];               /* 0.20: the 3D picture asked for each wave's file, and which file */                       /* 0.19: a user table's view: its columns as last reported (0xFF: not yet) */
+    uint8_t col[2][NCOL];                       /* 0.19: a user table's view: its columns as last reported (0xFF: not yet) */
+    uint32_t picgen[2], picid[2];               /* 0.20: the 3D picture asked for each wave's file, and which file */
     int tpos[2];                                /* table1 / table2 as last reported (-1: not yet) */
     int shown[2];                               /* the 3D views' bank as last reported (w1shown, w2shown; -1: not yet) */
     uint32_t seed;
 } mpc_t;
 
-/* ---- the wavetable files: one numbered list for every instance (the data folder's Wavetables) ---- */
+/* ---- the wavetable files: one numbered list for every instance. 0.21: from the shared VST2 Plugins/Content/
+ * Wavetables (beside the plugin folders, as the other Twisted Genetics instruments keep theirs: made on first load),
+ * then the plugin's own data/Wavetables (its files show in a folder of their own, "Wavetables") ---- */
 static cr_tables_t TABS;
-static char TDIR[1024];
+static char TDIR[1024], SDIR[1100];             /* the plugin's own folder; the shared one ("" when there isn't one) */
 static int tabs_ready;
+#define OWN "Wavetables/"                       /* the own folder's files in the list */
 static int tb_namecmp(const void *a, const void *b) { return strcasecmp(*(char *const *)a, *(char *const *)b); }
-static void tabs_walk(const char *rel, int depth)
+static void tabs_walk(const char *root, const char *prefix, const char *rel, int depth)
 {
-    char path[1400], sub[CR_TABLES_PATH];
+    char path[1400], sub[CR_TABLES_PATH], id[CR_TABLES_PATH + 16];
     char *names[512];
     int n = 0, i;
     DIR *d;
     struct dirent *e;
-    snprintf(path, sizeof path, rel[0] ? "%s/%s" : "%s", TDIR, rel);
+    snprintf(path, sizeof path, rel[0] ? "%s/%s" : "%s", root, rel);
     if (depth > 8 || !(d = opendir(path)))
         return;
     while ((e = readdir(d)) != 0 && n < 512)
@@ -89,13 +92,29 @@ static void tabs_walk(const char *rel, int depth)
         struct stat st;
         size_t l = strlen(names[i]);
         snprintf(sub, sizeof sub, rel[0] ? "%s/%s" : "%s%s", rel, names[i]);
-        snprintf(path, sizeof path, "%s/%s", TDIR, sub);
+        snprintf(path, sizeof path, "%s/%s", root, sub);
         if (!stat(path, &st) && S_ISDIR(st.st_mode))
-            tabs_walk(sub, depth + 1);
-        else if (l > 4 && !strcasecmp(names[i] + l - 4, ".wav"))
-            cr_tables_seen(&TABS, sub);
+            tabs_walk(root, prefix, sub, depth + 1);
+        else if (l > 4 && !strcasecmp(names[i] + l - 4, ".wav")) {
+            snprintf(id, sizeof id, "%s%s", prefix, sub);
+            cr_tables_seen(&TABS, id);
+        }
         free(names[i]);
     }
+}
+/* a list path's file on the disk: the shared folder's, else (OWN...) the plugin's own folder's */
+static void tab_file(const char *rel, char *out, size_t n)
+{
+    struct stat st;
+    if (SDIR[0]) {
+        snprintf(out, n, "%s/%s", SDIR, rel);
+        if (!stat(out, &st))
+            return;
+    }
+    if (!strncmp(rel, OWN, strlen(OWN)))
+        snprintf(out, n, "%s/%s", TDIR, rel + strlen(OWN));
+    else
+        snprintf(out, n, "%s/%s", TDIR, rel);   /* (a path from 0.13 - 0.20: the own folder's) */
 }
 static char DDIR[1024];
 static time_t TSCAN;
@@ -123,6 +142,24 @@ static void tabs_scan(const char *dir)
     snprintf(TDIR, sizeof TDIR, "%s/Wavetables", dir);
     mkdir(dir, 0755);                           /* (the official package has no data folder until we make one) */
     mkdir(TDIR, 0755);
+    {   /* the shared folder: dir is ".../VST2 Plugins/<plugin folder>/data", so ".../VST2 Plugins/Content/Wavetables" */
+        char up[1024], *sl;   /* (SDIR: room for it and "/Content/Wavetables") */
+        snprintf(up, sizeof up, "%s", dir);
+        SDIR[0] = 0;
+        if ((sl = strrchr(up, '/')) != 0 && sl != up) {
+            *sl = 0;                            /* the plugin folder */
+            if ((sl = strrchr(up, '/')) != 0 && sl != up) {
+                struct stat st;
+                *sl = 0;                        /* VST2 Plugins */
+                snprintf(SDIR, sizeof SDIR, "%s/Content", up);
+                mkdir(SDIR, 0755);
+                snprintf(SDIR, sizeof SDIR, "%s/Content/Wavetables", up);
+                mkdir(SDIR, 0755);
+                if (stat(SDIR, &st) || !S_ISDIR(st.st_mode))
+                    SDIR[0] = 0;
+            }
+        }
+    }
     snprintf(index, sizeof index, "%s/TableIndex.txt", dir);
     if (!tabs_ready) {
         cr_tables_init(&TABS);
@@ -138,7 +175,9 @@ static void tabs_scan(const char *dir)
         tabs_ready = 1;
     }
     cr_tables_begin(&TABS);
-    tabs_walk("", 0);
+    if (SDIR[0])
+        tabs_walk(SDIR, "", "", 0);
+    tabs_walk(TDIR, OWN, "", 0);
     cr_tables_done(&TABS);
     if ((n = cr_tables_new_lines(&TABS, buf, sizeof buf)) > 0 && (f = fopen(index, "ab")) != 0) {
         do
@@ -166,7 +205,7 @@ static void set_file(mpc_t *m, int k, uint32_t id)
     m->file[k] = id;                            /* kept as set (a number not on this MPC shows MISSING) */
     snprintf(m->fpath[k], sizeof m->fpath[k], "%s", rel ? rel : "");
     if (rel && cr_tables_present(&TABS, id)) {
-        snprintf(path, sizeof path, "%s/%s", TDIR, rel);
+        tab_file(rel, path, sizeof path);
         if ((f = fopen(path, "rb")) != 0) {
             fseek(f, 0, SEEK_END);
             ok = cr_wav_open(&w, file_read, f, (uint32_t)ftell(f)) && cr_wav_bank(&w, 0, m->waves[k], &work);
@@ -565,6 +604,12 @@ static void state_set(mpc_t *m, const char *s)
             rel[l] = 0;
             if (l) {
                 uint32_t id = cr_tables_find(&TABS, rel);
+                if (!id || !cr_tables_present(&TABS, id)) {   /* a 0.13 - 0.20 project: the own folder's file */
+                    char own[CR_TABLES_PATH + 16];
+                    snprintf(own, sizeof own, OWN "%s", rel);
+                    if (cr_tables_present(&TABS, cr_tables_find(&TABS, own)))
+                        id = cr_tables_find(&TABS, own);
+                }
                 set_file(m, k, id);
                 if (!id)                        /* not in this index: kept, plays the bank */
                     snprintf(m->fpath[k], sizeof m->fpath[k], "%s", rel);

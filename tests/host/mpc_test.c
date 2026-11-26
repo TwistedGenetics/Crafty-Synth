@@ -44,11 +44,13 @@ int main(int argc, char **argv)
         char wp[600];
         static const uint8_t hdr[44] = {'R','I','F','F', (36 + 1200) & 0xFF, (36 + 1200) >> 8, 0, 0, 'W','A','V','E','f','m','t',' ',
             16, 0, 0, 0, 1, 0, 1, 0, 0x44, 0xAC, 0, 0, 0x88, 0x58, 1, 0, 2, 0, 16, 0, 'd','a','t','a', 1200 & 0xFF, 1200 >> 8, 0, 0};
-        snprintf(wp, sizeof wp, "rm -rf '%s/Wavetables' '%s/TableIndex.txt' && mkdir -p '%s/Wavetables/Leads' '%s/Wavetables/Basses'",
-                 dir, dir, dir, dir);
+        /* 0.21: Basses/Acid in the shared VST2 Plugins/Content/Wavetables (dir is <VST2 Plugins>/<plugin>/data),
+         * Leads/Saw Up in the plugin's own data/Wavetables (listed after, in a folder "Wavetables") */
+        snprintf(wp, sizeof wp, "rm -rf '%s/Wavetables' '%s/TableIndex.txt' '%s/../../Content' && mkdir -p '%s/Wavetables/Leads' "
+                 "'%s/../../Content/Wavetables/Basses'", dir, dir, dir, dir, dir);
         CHECK(system(wp) == 0, "mkdir");
-        for (int w = 0; w < 2; w++) {           /* Leads/Saw Up first on the disk, Basses/Acid first by name */
-            snprintf(wp, sizeof wp, w ? "%s/Wavetables/Basses/Acid.wav" : "%s/Wavetables/Leads/Saw Up.wav", dir);
+        for (int w = 0; w < 2; w++) {
+            snprintf(wp, sizeof wp, w ? "%s/../../Content/Wavetables/Basses/Acid.wav" : "%s/Wavetables/Leads/Saw Up.wav", dir);
             f = fopen(wp, "wb");
             if (f) {
                 fwrite(hdr, 1, sizeof hdr, f);
@@ -139,12 +141,12 @@ int main(int argc, char **argv)
         e->set_param(m, "w1wt", "8");
         CHECK(!strcmp(get(e, m, "w1wt_display"), "Basses / Acid"), "w1wt 8: %s", get(e, m, "w1wt_display"));
         e->set_param(m, "w1wt_next", "1");
-        CHECK(!strcmp(get(e, m, "w1wt"), "9") && !strcmp(get(e, m, "w1wt_display"), "Leads / Saw Up"), "next: %s %s",
+        CHECK(!strcmp(get(e, m, "w1wt"), "9") && !strcmp(get(e, m, "w1wt_display"), "Wavetables / Leads / Saw Up"), "next: %s %s",
               get(e, m, "w1wt"), get(e, m, "w1wt_display"));
         e->set_param(m, "w1wt_next", "1");      /* the end of the list: it stays */
         CHECK(!strcmp(get(e, m, "w1wt"), "9"), "past the end: %s", get(e, m, "w1wt"));
         e->set_param(m, "w1list", "1");
-        CHECK(!strcmp(get(e, m, "w1row_8"), "Leads / Saw Up") && !strcmp(get(e, m, "w1row_8_on"), "1") &&
+        CHECK(!strcmp(get(e, m, "w1row_8"), "Wavetables / Leads / Saw Up") && !strcmp(get(e, m, "w1row_8_on"), "1") &&
               !strcmp(get(e, m, "w1row_1"), "MATH"), "rows (window from MATH)");
         e->set_param(m, "w1row_3", "1");        /* a factory bank tapped: the file goes */
         CHECK(!strcmp(get(e, m, "w1wt_display"), "CURATED 1") && !strcmp(get(e, m, "table1_display"), "BANK"),
@@ -152,7 +154,7 @@ int main(int argc, char **argv)
         e->set_param(m, "w1wt", "0");
         CHECK(!strcmp(get(e, m, "w1wt_display"), "ANALOGUE"), "w1wt 0: %s", get(e, m, "w1wt_display"));
         e->set_param(m, "w2wt", "10");          /* OSC B: 9 factory banks (sine / noise too) */
-        CHECK(!strcmp(get(e, m, "w2wt_display"), "Leads / Saw Up"), "w2wt 10: %s", get(e, m, "w2wt_display"));
+        CHECK(!strcmp(get(e, m, "w2wt_display"), "Wavetables / Leads / Saw Up"), "w2wt 10: %s", get(e, m, "w2wt_display"));
         {   /* 0.19: its view draws the file's ramp: low columns at the left, high at the right */
             int lo = atoi(get(e, m, "w2c_2")), hi = atoi(get(e, m, "w2c_55")), mid = atoi(get(e, m, "w2c_28"));
             CHECK(lo < 6 && hi > 26 && mid > 12 && mid < 20, "w2 view columns %d %d %d", lo, mid, hi);
@@ -174,7 +176,7 @@ int main(int argc, char **argv)
     e->set_param(m2, "state", state);
     CHECK(!strcmp(get(e, m2, "cut"), "77") && !strcmp(get(e, m2, "res"), "99") && !strcmp(get(e, m2, "preset"), "66"),
           "state: cut %s res %s", get(e, m2, "cut"), get(e, m2, "res"));
-    CHECK(!strcmp(get(e, m2, "w2wt_display"), "Leads / Saw Up"), "state: w2wt %s", get(e, m2, "w2wt_display"));
+    CHECK(!strcmp(get(e, m2, "w2wt_display"), "Wavetables / Leads / Saw Up"), "state: w2wt %s", get(e, m2, "w2wt_display"));
     /* sound */
     {
         uint8_t on[3] = {0x90, 57, 110};

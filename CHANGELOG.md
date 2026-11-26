@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.21 beta (2026-11-26)
+
+MPC only:
+- **Wavetables from the shared Content folder**, as the other Twisted Genetics instruments (Helix) keep theirs:
+  `VST2 Plugins/Content/Wavetables`, beside the plugin folders, made the first time the plugin loads. Its files (and
+  sub-folders) come first in each oscillator's WAVETABLE list, after the factory banks. The plugin's own
+  `data/Wavetables` still works: its files follow, in a folder named "Wavetables", and projects saved with 0.13 - 0.20
+  still find them. `data/TableIndex.txt` keeps numbering both.
+
 ## 0.20 beta (2026-11-23)
 
 - **Fix, every version: the buzzing click at the start of notes on the LADDER and TB-303 filters.** With the cutoff

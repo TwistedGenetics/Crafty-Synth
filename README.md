@@ -6,7 +6,7 @@ a big screen and seven knobs to drive it.
 
 **Also as an AU / VST3 plugin for macOS and an MPC plugin**, the same engine, released together: [docs/PORTS.md](docs/PORTS.md).
 
-**Status: 0.20 beta, not yet tried on a real FM-1.** Read [docs/RECOVERY.md](docs/RECOVERY.md) before installing.
+**Status: 0.21 beta, not yet tried on a real FM-1.** Read [docs/RECOVERY.md](docs/RECOVERY.md) before installing.
 
 - **Editor:** [twistedgenetics.github.io/Crafty-Synth/editor](https://twistedgenetics.github.io/Crafty-Synth/editor/):
   every value, a preview running the firmware's own engine (WebAssembly), presets to and from the FM-1, and **Serum /
